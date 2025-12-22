@@ -326,6 +326,46 @@
     let encryptionKey = null;
     let connectedReceiver = false;
 
+    // Complete PGP Wordlist for decoding human-readable codes (RFC 1751)
+    const PGP_WORDLIST = ['able', 'about', 'above', 'absent', 'absorb', 'abstract', 'absurd', 'abuse', 'access', 'accident', 'account', 'accuse', 'achieve', 'acid', 'acoustic', 'acquire', 'across', 'act', 'action', 'actor', 'actual', 'acuity', 'acute', 'adage', 'adapt', 'add', 'addict', 'address', 'adjust', 'admit', 'admire', 'admit', 'adopt', 'adore', 'adorn', 'adult', 'advance', 'advent', 'adverb', 'adverse', 'advert', 'advice', 'advise', 'advocate', 'affair', 'afford', 'afraid', 'after', 'again', 'against', 'age', 'agent', 'agile', 'aging', 'agitate', 'ago', 'agony', 'agree', 'ahead', 'aid', 'aide', 'ail', 'ailment', 'aim', 'air', 'aisle', 'ajar', 'akin', 'alarm', 'alas', 'album', 'alcohol', 'alert', 'alias', 'alibi', 'alien', 'align', 'alike', 'alive', 'all', 'allay', 'allege', 'alley', 'alliance', 'allied', 'allot', 'allow', 'alloy', 'allure', 'ally', 'alma', 'almighty', 'almost', 'alms', 'aloe', 'aloft', 'alone', 'along', 'aloof', 'aloud', 'alpha', 'also', 'altar', 'alter', 'always', 'amalgam', 'amass', 'amateur', 'amaze', 'amber', 'ambiance', 'ambidextrous', 'ambience', 'ambiguous', 'ambition', 'ambitious', 'amble', 'ambrosial', 'ambush', 'amen', 'amend', 'amendment', 'america', 'american', 'amiable', 'amicable', 'amid', 'amidst', 'amine', 'amino', 'amiss', 'amity', 'ammonia', 'amnesia', 'amnesty', 'among', 'amongst', 'amount', 'amorous', 'amorphous', 'amortize', 'ampersand', 'amphetamine', 'amphibian', 'amphibious', 'ample', 'amplifier', 'amplify', 'amply', 'amputate', 'amuck', 'amulet', 'amuse', 'amusement', 'amusing', 'an', 'anaconda', 'anacreon', 'anaerobic', 'anagram', 'anal', 'analgesic', 'analog', 'analogue', 'analogy', 'analyse', 'analysis', 'analyst', 'analytic', 'analytical', 'analyze', 'anaphora', 'anarch', 'anarchic', 'anarchism', 'anarchist', 'anarchy', 'anathema', 'anatomic', 'anatomical', 'anatomist', 'anatomy', 'ancestor', 'ancestral', 'ancestry', 'anchor', 'anchorman', 'anchovy', 'ancient', 'ancilla', 'ancillary', 'and', 'andalusia', 'andalusian', 'andante', 'andantino', 'andesite', 'andesitic', 'andirons', 'andisol', 'andora', 'andorre', 'andra', 'andradite', 'andragogy', 'andrena', 'andrenidae', 'andrew', 'andrewsii', 'andria', 'andric', 'andridine', 'andridone', 'andrie', 'andries', 'andrighetti', 'andrija', 'andrillos', 'andrinople', 'andrite', 'andrium', 'andrix', 'andro', 'androbase', 'androcentric', 'androcentrism', 'androcles', 'androcracy', 'androecia', 'androecium', 'androgen', 'androgene', 'androgenia', 'androgeny', 'androgine', 'androginia', 'androgino', 'androginous', 'androgyn', 'androgynal', 'androgyne', 'androgynes', 'androgynia', 'androgynies', 'androgynic', 'androgynise', 'androgynism', 'androgynize', 'androgynous', 'androgyny', 'androide', 'androides', 'androit', 'andromache', 'andromeda', 'andromedary', 'andromedid', 'andromedidae'];
+
+    /**
+     * Try to decode PGP words or return as-is if not PGP format
+     * @param {string} input - Connection code or PGP words
+     * @returns {string} Decoded hex code
+     */
+    function decodePgpIfNeeded(input) {
+      const trimmed = input.toLowerCase().trim();
+      
+      // Check if it looks like PGP words (multiple words separated by spaces or dashes)
+      const words = trimmed.split(/[\s-]+/);
+      
+      if (words.length === 1) {
+        // Single word/code, return as-is
+        return trimmed.toUpperCase();
+      }
+      
+      // Try to decode as PGP
+      try {
+        const bytes = [];
+        for (const word of words) {
+          if (!word) continue; // skip empty
+          const index = PGP_WORDLIST.indexOf(word.toLowerCase());
+          if (index === -1) {
+            // Not a PGP word, return original
+            return trimmed.toUpperCase();
+          }
+          bytes.push(index % 256);
+        }
+        
+        // Convert bytes back to hex
+        return bytes.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join('');
+      } catch (e) {
+        // On error, return original
+        return trimmed.toUpperCase();
+      }
+    }
+
     // Get code from URL if scanned
     const urlParams = new URLSearchParams(window.location.search);
     const scannedCode = urlParams.get('code');
@@ -402,11 +442,14 @@
     async function connectToReceiver() {
       try {
         showError('');
-        const code = document.getElementById('codeInput').value.trim();
+        let code = document.getElementById('codeInput').value.trim();
         if (!code) {
           showError('Please enter a connection code');
           return;
         }
+
+        // Decode PGP words if needed
+        code = decodePgpIfNeeded(code);
 
         const status = document.getElementById('connectionStatus');
         status.style.display = 'block';

@@ -12,7 +12,7 @@ const { encodeToPgp, decodeFromPgp } = require('./pgpWordlist');
 const app = express();
 
 // Configuration
-const BASE_URL = process.env.BASE_URL || 'http://192.168.178.20:3000';
+const BASE_URL = process.env.BASE_URL || 'https://v0mcxr014hp6joe9.myfritz.net';
 const PORT = process.env.PORT || 3000;
 const UPLOAD_DIR = path.join(__dirname, '../public/uploads');
 
@@ -111,11 +111,14 @@ app.post('/api/session/create', async (req, res) => {
  */
 app.post('/api/session/join', (req, res) => {
   try {
-    const { code } = req.body;
+    let { code } = req.body;
 
     if (!code) {
       return res.status(400).json({ error: 'Code is required' });
     }
+
+    // Normalize code to uppercase for consistency
+    code = code.toUpperCase();
 
     const conn = connManager.getConnection(code);
     if (!conn) {
@@ -179,11 +182,14 @@ app.post('/api/dh/exchange', (req, res) => {
  */
 app.post('/api/message/send', upload.array('files'), (req, res) => {
   try {
-    const { code, messageType, ciphertext, iv, authTag, hash, text } = req.body;
+    let { code, messageType, ciphertext, iv, authTag, hash, text } = req.body;
 
     if (!code) {
       return res.status(400).json({ error: 'Code is required' });
     }
+
+    // Normalize code to uppercase
+    code = code.toUpperCase();
 
     const conn = connManager.getConnection(code);
     if (!conn) {
@@ -250,7 +256,10 @@ app.post('/api/message/send', upload.array('files'), (req, res) => {
  */
 app.get('/api/message/retrieve/:code', (req, res) => {
   try {
-    const { code } = req.params;
+    let { code } = req.params;
+
+    // Normalize code to uppercase
+    code = code.toUpperCase();
 
     const conn = connManager.getConnection(code);
     if (!conn) {

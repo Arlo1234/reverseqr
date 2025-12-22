@@ -229,6 +229,9 @@
       <img id="qrCode" alt="QR Code" style="max-width: 300px; padding: 15px; background: #f8f8f8; border-radius: 10px; display: block; margin: 0 auto 20px;" />
 
       <div class="code-display">
+        <div class="code-label">QR URL:</div>
+        <div id="qrUrl" style="word-break: break-all; padding: 10px; background: #f0f0f0; border-radius: 5px; font-family: monospace; font-size: 12px; margin-bottom: 15px; color: #666;">Loading...</div>
+        
         <div class="code-label">Share this code:</div>
         <div class="pgp-code" id="pgpCode">Loading...</div>
         <button class="copy-button" onclick="copyCode()">📋 Copy Code</button>
@@ -263,6 +266,10 @@
 
         connectionCode = data.code;
         document.getElementById('pgpCode').textContent = data.pgpCode;
+
+        // Display QR URL in plain text
+        const qrUrl = `${data.baseUrl}/join?code=${data.code}`;
+        document.getElementById('qrUrl').textContent = qrUrl;
 
         // Display QR code (server-generated as data URL)
         const qrImage = document.getElementById('qrCode');

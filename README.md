@@ -1,3 +1,5 @@
+# !!!!!!!!!!STILL IN ALPHA, DONT TRY TO MAKE IT WORK!!!!!!!!!! 
+
 # 🔒 ReverseQR - Secure File & Text Sharing
 
 A modern, secure web application for sharing files and text between two users with military-grade encryption and human-readable connection codes.
