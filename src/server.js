@@ -90,8 +90,8 @@ app.post('/api/session/create', async (req, res) => {
     const qrUrl = `${BASE_URL}/join?code=${code}`;
     const qrCode = await QRCode.toDataURL(qrUrl, { width: 300 });
 
-    // Encode connection code as PGP words
-    const codeBuffer = Buffer.from(code, 'utf8');
+    // Encode connection code as PGP words (from hex string to bytes)
+    const codeBuffer = Buffer.from(code, 'hex');
     const pgpCode = encodeToPgp(codeBuffer);
 
     res.json({
