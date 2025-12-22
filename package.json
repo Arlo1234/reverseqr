@@ -1,0 +1,16 @@
+{
+  "name": "reverseqr",
+  "version": "1.0.0",
+  "description": "A secure file/text transfer webserver using QR codes and PGP wordlist codes.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server/server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.13.0",
+    "qrcode": "^1.5.3",
+    "multer": "^1.4.5-lts.1",
+    "crypto": "^1.0.1"
+  }
+}

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>reverseqr</title>
+  <style>
+    body { font-family: sans-serif; margin: 2em; }
+    #qr { margin: 1em 0; }
+    #fileInput { display: block; margin: 1em 0; }
+    #textInput { width: 100%; height: 4em; }
+    #sendBtn { margin: 1em 0; }
+    #output { margin: 1em 0; white-space: pre-wrap; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <h1>reverseqr</h1>
+  <div id="modeSelect">
+    <button id="asReceiver">I am the recipient</button>
+    <button id="asSender">I am the sender</button>
+  </div>
+  <div id="receiverUI" class="hidden">
+    <h2>Recipient</h2>
+    <div id="qr"></div>
+    <div>Connection code: <span id="connCode"></span></div>
+    <div id="waitSender">Waiting for sender to connect...</div>
+    <div id="output"></div>
+  </div>
+  <div id="senderUI" class="hidden">
+    <h2>Sender</h2>
+    <label>Enter connection code: <input id="senderCodeInput" /></label>
+    <button id="connectBtn">Connect</button>
+    <div id="senderConnStatus"></div>
+    <textarea id="textInput" placeholder="Enter text to send..."></textarea>
+    <input type="file" id="fileInput" multiple />
+    <button id="sendBtn">Send</button>
+    <div id="output"></div>
+  </div>
+  <script src="client.js"></script>
+</body>
+</html>
