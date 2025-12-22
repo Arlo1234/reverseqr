@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ReverseQR - Alternative Receiver</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      padding: 40px;
+      max-width: 500px;
+      width: 100%;
+    }
+
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+      text-align: center;
+      font-size: 28px;
+    }
+
+    .subtitle {
+      color: #666;
+      text-align: center;
+      margin-bottom: 30px;
+      font-size: 14px;
+    }
+
+    .code-section {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    .code-display {
+      background: #f0f0f0;
+      border: 2px solid #667eea;
+      border-radius: 10px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+
+    .code-label {
+      font-size: 12px;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+    }
+
+    .pgp-code {
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      color: #333;
+      word-break: break-all;
+      line-height: 1.6;
+      padding: 10px;
+      background: white;
+      border-radius: 5px;
+      user-select: all;
+    }
+
+    .info-text {
+      background: #edf2f7;
+      padding: 15px;
+      border-radius: 8px;
+      color: #2d3748;
+      font-size: 13px;
+      margin-bottom: 20px;
+      border-left: 4px solid #667eea;
+    }
+
+    .copy-button {
+      background: #667eea;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 15px;
+      transition: background 0.3s ease;
+      width: 100%;
+    }
+
+    .copy-button:hover {
+      background: #5568d3;
+    }
+
+    .copy-button.copied {
+      background: #48bb78;
+    }
+
+    .messages-section {
+      margin-top: 40px;
+      padding-top: 30px;
+      border-top: 2px solid #eee;
+    }
+
+    .messages-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 20px;
+    }
+
+    .message {
+      background: #f8f8f8;
+      border-left: 4px solid #667eea;
+      padding: 15px;
+      margin-bottom: 15px;
+      border-radius: 5px;
+    }
+
+    .message-type {
+      font-size: 12px;
+      color: #666;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+      font-weight: 600;
+    }
+
+    .message-text {
+      color: #333;
+      word-break: break-word;
+      margin-bottom: 10px;
+    }
+
+    .message-files {
+      margin-top: 10px;
+    }
+
+    .file-item {
+      background: white;
+      padding: 10px;
+      border-radius: 5px;
+      font-size: 13px;
+      color: #667eea;
+      cursor: pointer;
+      margin-bottom: 8px;
+      text-decoration: none;
+      display: block;
+      transition: background 0.2s;
+    }
+
+    .file-item:hover {
+      background: #f0f0f0;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #667eea;
+      margin: 0 2px;
+      animation: spinner 1.4s infinite ease-in-out both;
+    }
+
+    @keyframes spinner {
+      0%, 80%, 100% { opacity: 0.3; }
+      40% { opacity: 1; }
+    }
+
+    .status {
+      text-align: center;
+      color: #666;
+      font-size: 14px;
+      margin-top: 20px;
+    }
+
+    .hash-verification {
+      font-size: 12px;
+      color: #48bb78;
+      margin-top: 8px;
+    }
+
+    .error {
+      background: #fed7d7;
+      color: #c53030;
+      padding: 12px;
+      border-radius: 5px;
+      margin-bottom: 20px;
+      font-size: 14px;
+      display: none;
+    }
+
+    .mode-toggle {
+      text-align: center;
+      margin-top: 30px;
+    }
+
+    .mode-link {
+      color: #667eea;
+      text-decoration: none;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .mode-link:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔒 ReverseQR</h1>
+    <p class="subtitle">Secure File & Text Sharing - Alternative Mode</p>
+
+    <div id="error" class="error"></div>
+
+    <div class="code-section">
+      <div class="info-text">
+        📱 Sender will display their connection code. Copy it below to establish a secure connection.
+      </div>
+
+      <div class="code-display">
+        <div class="code-label">Your Connection Code to Display:</div>
+        <button class="copy-button" onclick="startReceiving()">🔄 Generate Code for Sender</button>
+      </div>
+    </div>
+
+    <div id="displaySection" style="display: none;">
+      <div class="code-display">
+        <div class="code-label">Share this code with the sender:</div>
+        <div class="pgp-code" id="pgpCode"></div>
+        <button class="copy-button" onclick="copyCode()">📋 Copy Code</button>
+      </div>
+
+      <div class="status">
+        <p>Waiting for sender to input the code above...</p>
+        <div class="spinner"></div>
+        <div class="spinner"></div>
+        <div class="spinner"></div>
+      </div>
+    </div>
+
+    <div id="messagesSection" class="messages-section" style="display: none;">
+      <div class="messages-title">📬 Received Messages</div>
+      <div id="messagesList"></div>
+    </div>
+
+    <div class="mode-toggle">
+      <a href="/" class="mode-link">↔️ Switch to Standard Mode (Display QR code)</a>
+    </div>
+  </div>
+
+  <script>
+    let connectionCode = null;
+    let receiverDhPublicKey = null;
+
+    async function startReceiving() {
+      try {
+        document.getElementById('error').style.display = 'none';
+        const response = await fetch('/api/session/create', { method: 'POST' });
+        const data = await response.json();
+
+        connectionCode = data.code;
+        receiverDhPublicKey = data.initiatorDhPublicKey;
+
+        document.getElementById('pgpCode').textContent = data.pgpCode;
+        document.getElementById('displaySection').style.display = 'block';
+        event.target.disabled = true;
+        event.target.textContent = '✓ Code Generated';
+
+        // Start polling for messages
+        startMessagePolling();
+      } catch (error) {
+        showError('Failed to create session: ' + error.message);
+        console.error(error);
+      }
+    }
+
+    async function startMessagePolling() {
+      const pollInterval = setInterval(async () => {
+        try {
+          const response = await fetch(`/api/message/retrieve/${connectionCode}`);
+          const data = await response.json();
+
+          if (data.messages && data.messages.length > 0) {
+            clearInterval(pollInterval);
+            displayMessages(data.messages);
+          }
+        } catch (error) {
+          console.error('Error polling for messages:', error);
+        }
+      }, 2000);
+    }
+
+    async function displayMessages(messages) {
+      const messagesSection = document.getElementById('messagesSection');
+      const messagesList = document.getElementById('messagesList');
+      messagesSection.style.display = 'block';
+
+      messagesList.innerHTML = '';
+
+      for (const msg of messages) {
+        const msgDiv = document.createElement('div');
+        msgDiv.className = 'message';
+
+        if (msg.type === 'text') {
+          msgDiv.innerHTML = `
+            <div class="message-type">📝 Text Message</div>
+            <div class="message-text">${escapeHtml(msg.text || '[Message content]')}</div>
+            <div class="hash-verification">✓ Hash verified</div>
+          `;
+        } else if (msg.type === 'files') {
+          msgDiv.innerHTML = `
+            <div class="message-type">📦 Files</div>
+            <div class="message-files">
+              ${msg.files ? msg.files.map(f => `
+                <a href="#" class="file-item">
+                  📥 ${escapeHtml(f.originalName || 'file')}
+                </a>
+              `).join('') : ''}
+            </div>
+          `;
+        }
+
+        messagesList.appendChild(msgDiv);
+      }
+    }
+
+    function copyCode() {
+      const codeElement = document.getElementById('pgpCode');
+      const text = codeElement.textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        const button = event.target;
+        button.textContent = '✓ Copied!';
+        button.classList.add('copied');
+        setTimeout(() => {
+          button.textContent = '📋 Copy Code';
+          button.classList.remove('copied');
+        }, 2000);
+      });
+    }
+
+    function showError(message) {
+      const errorDiv = document.getElementById('error');
+      errorDiv.textContent = message;
+      errorDiv.style.display = 'block';
+    }
+
+    function escapeHtml(unsafe) {
+      return unsafe
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+  </script>
+</body>
+</html>

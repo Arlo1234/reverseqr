@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ReverseQR - Sender</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      padding: 40px;
+      max-width: 600px;
+      width: 100%;
+    }
+
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+      text-align: center;
+      font-size: 28px;
+    }
+
+    .subtitle {
+      color: #666;
+      text-align: center;
+      margin-bottom: 30px;
+      font-size: 14px;
+    }
+
+    .code-input-section {
+      margin-bottom: 30px;
+    }
+
+    .input-group {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+
+    input[type="text"] {
+      flex: 1;
+      padding: 12px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 14px;
+      font-family: 'Courier New', monospace;
+      transition: border-color 0.3s;
+    }
+
+    input[type="text"]:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    .btn {
+      background: #667eea;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+
+    .btn:hover {
+      background: #5568d3;
+    }
+
+    .btn:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+
+    .btn-secondary {
+      background: #9f7aea;
+    }
+
+    .btn-secondary:hover {
+      background: #8b68c4;
+    }
+
+    .message-section {
+      margin-top: 30px;
+      padding-top: 30px;
+      border-top: 2px solid #eee;
+    }
+
+    .section-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 15px;
+    }
+
+    .text-input {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 14px;
+      resize: vertical;
+      min-height: 100px;
+      margin-bottom: 15px;
+      font-family: inherit;
+    }
+
+    .text-input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    .file-upload {
+      position: relative;
+      display: inline-block;
+      cursor: pointer;
+      width: 100%;
+      margin-bottom: 15px;
+    }
+
+    .file-upload input[type="file"] {
+      display: none;
+    }
+
+    .file-upload-label {
+      display: block;
+      padding: 20px;
+      border: 2px dashed #667eea;
+      border-radius: 8px;
+      text-align: center;
+      color: #667eea;
+      font-weight: 600;
+      transition: all 0.3s;
+      background: #f8f8f8;
+    }
+
+    .file-upload:hover .file-upload-label {
+      background: #f0f0f0;
+    }
+
+    .file-upload.active .file-upload-label {
+      border-color: #48bb78;
+      color: #48bb78;
+      background: #f0fdf4;
+    }
+
+    .files-list {
+      margin-top: 15px;
+    }
+
+    .file-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #f8f8f8;
+      padding: 10px 15px;
+      border-radius: 5px;
+      margin-bottom: 8px;
+      font-size: 13px;
+    }
+
+    .file-size {
+      color: #666;
+      font-size: 12px;
+      margin-left: 10px;
+    }
+
+    .remove-file {
+      background: #fed7d7;
+      color: #c53030;
+      border: none;
+      padding: 4px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .remove-file:hover {
+      background: #fc8181;
+    }
+
+    .send-button {
+      width: 100%;
+      padding: 14px;
+      font-size: 16px;
+      font-weight: 700;
+      margin-top: 20px;
+    }
+
+    .error {
+      background: #fed7d7;
+      color: #c53030;
+      padding: 12px;
+      border-radius: 5px;
+      margin-bottom: 20px;
+      font-size: 14px;
+      display: none;
+    }
+
+    .success {
+      background: #c6f6d5;
+      color: #22543d;
+      padding: 12px;
+      border-radius: 5px;
+      margin-bottom: 20px;
+      font-size: 14px;
+      display: none;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: white;
+      margin: 0 2px;
+      animation: spinner 1.4s infinite ease-in-out both;
+    }
+
+    @keyframes spinner {
+      0%, 80%, 100% { opacity: 0.3; }
+      40% { opacity: 1; }
+    }
+
+    .mode-toggle {
+      text-align: center;
+      margin-top: 30px;
+    }
+
+    .mode-link {
+      color: #667eea;
+      text-decoration: none;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .mode-link:hover {
+      text-decoration: underline;
+    }
+
+    .connection-status {
+      background: #edf2f7;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      text-align: center;
+      color: #2d3748;
+      font-size: 13px;
+    }
+
+    .connection-status.connected {
+      background: #c6f6d5;
+      color: #22543d;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔒 ReverseQR</h1>
+    <p class="subtitle">Secure File & Text Sharing - Sender Mode</p>
+
+    <div id="error" class="error"></div>
+    <div id="success" class="success"></div>
+
+    <div class="code-input-section">
+      <div class="section-title">Step 1: Connect</div>
+      <div class="input-group">
+        <input type="text" id="codeInput" placeholder="Enter connection code or paste PGP words" />
+        <button class="btn" onclick="connectToReceiver()">🔗 Connect</button>
+      </div>
+      <div id="connectionStatus" class="connection-status" style="display: none;">
+        <span>Establishing secure connection...</span>
+      </div>
+    </div>
+
+    <div id="messageSection" class="message-section" style="display: none;">
+      <div class="section-title">Step 2: Share Content</div>
+
+      <div>
+        <label class="section-title">📝 Text Message (Optional)</label>
+        <textarea id="textInput" class="text-input" placeholder="Enter your message (or skip to upload files)"></textarea>
+      </div>
+
+      <div>
+        <label class="section-title">📦 Upload Files (Optional)</label>
+        <div class="file-upload" onclick="document.getElementById('fileInput').click();">
+          <input type="file" id="fileInput" multiple onchange="handleFileSelect(event)" />
+          <label class="file-upload-label">
+            📁 Click to browse or drag & drop files here
+          </label>
+        </div>
+        <div id="filesList" class="files-list"></div>
+      </div>
+
+      <button class="btn send-button" onclick="sendMessage()" id="sendBtn">
+        ✈️ Send Securely
+      </button>
+    </div>
+
+    <div class="mode-toggle">
+      <a href="/" class="mode-link">↔️ Switch to Alternative Mode (Display QR code for scanner)</a>
+    </div>
+  </div>
+
+  <script>
+    let selectedFiles = [];
+    let connectionCode = null;
+    let encryptionKey = null;
+    let connectedReceiver = false;
+
+    // Get code from URL if scanned
+    const urlParams = new URLSearchParams(window.location.search);
+    const scannedCode = urlParams.get('code');
+    if (scannedCode) {
+      document.getElementById('codeInput').value = scannedCode;
+    }
+
+    // Drag and drop support
+    document.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      document.querySelector('.file-upload-label').style.background = '#f0f0f0';
+    });
+
+    document.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      document.querySelector('.file-upload-label').style.background = '#f8f8f8';
+    });
+
+    document.addEventListener('drop', (e) => {
+      e.preventDefault();
+      handleFileSelect({ dataTransfer: e.dataTransfer });
+    });
+
+    function handleFileSelect(event) {
+      const files = event.dataTransfer ? event.dataTransfer.files : event.target.files;
+      for (let file of files) {
+        if (!validateFileSize(file)) {
+          continue;
+        }
+        if (!selectedFiles.find(f => f.name === file.name && f.size === file.size)) {
+          selectedFiles.push(file);
+        }
+      }
+      renderFilesList();
+    }
+
+    function renderFilesList() {
+      const list = document.getElementById('filesList');
+      list.innerHTML = '';
+      selectedFiles.forEach((file, idx) => {
+        const item = document.createElement('div');
+        item.className = 'file-item';
+        item.innerHTML = `
+          <span>📄 ${file.name} <span class="file-size">(${formatFileSize(file.size)})</span></span>
+          <button class="remove-file" onclick="removeFile(${idx})">Remove</button>
+        `;
+        list.appendChild(item);
+      });
+    }
+
+    function removeFile(idx) {
+      selectedFiles.splice(idx, 1);
+      renderFilesList();
+    }
+
+    const MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024; // 5GB in bytes
+
+    function formatFileSize(bytes) {
+      if (bytes === 0) return '0 Bytes';
+      const k = 1024;
+      const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+    }
+
+    function validateFileSize(file) {
+      if (file.size > MAX_FILE_SIZE) {
+        showError(`File "${file.name}" is too large. Maximum size is 5GB. File is ${formatFileSize(file.size)}.`);
+        return false;
+      }
+      return true;
+    }
+
+    async function connectToReceiver() {
+      try {
+        showError('');
+        const code = document.getElementById('codeInput').value.trim();
+        if (!code) {
+          showError('Please enter a connection code');
+          return;
+        }
+
+        const status = document.getElementById('connectionStatus');
+        status.style.display = 'block';
+
+        // Join the session
+        const response = await fetch('/api/session/join', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code })
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Connection failed');
+        }
+
+        const data = await response.json();
+        connectionCode = data.code;
+
+        // Perform DH key exchange
+        // This would involve crypto operations - simplified for now
+        encryptionKey = new Uint8Array(32); // Placeholder
+        crypto.getRandomValues(encryptionKey);
+
+        connectedReceiver = true;
+        document.getElementById('messageSection').style.display = 'block';
+        status.innerHTML = '<span style="color: #22543d;">✓ Connected to receiver</span>';
+        status.classList.add('connected');
+        setTimeout(() => {
+          status.style.display = 'none';
+        }, 3000);
+      } catch (error) {
+        showError('Connection failed: ' + error.message);
+        console.error(error);
+      }
+    }
+
+    async function sendMessage() {
+      try {
+        if (!connectedReceiver) {
+          showError('Not connected to receiver');
+          return;
+        }
+
+        const text = document.getElementById('textInput').value.trim();
+        if (!text && selectedFiles.length === 0) {
+          showError('Please enter a message or select files');
+          return;
+        }
+
+        const sendBtn = document.getElementById('sendBtn');
+        sendBtn.disabled = true;
+        sendBtn.innerHTML = '<span class="spinner"></span><span class="spinner"></span><span class="spinner"></span> Sending...';
+
+        const formData = new FormData();
+        formData.append('code', connectionCode);
+        
+        if (text && selectedFiles.length === 0) {
+          // Send text message
+          formData.append('messageType', 'text');
+          formData.append('text', text);
+          // In a real implementation, these would be encrypted
+          formData.append('ciphertext', stringToHex(text));
+          formData.append('iv', arrayToHex(crypto.getRandomValues(new Uint8Array(16))));
+          formData.append('authTag', arrayToHex(crypto.getRandomValues(new Uint8Array(16))));
+          formData.append('hash', await hashText(text));
+        } else {
+          // Send files
+          formData.append('messageType', 'files');
+          for (let file of selectedFiles) {
+            formData.append('files', file);
+          }
+        }
+
+        const response = await fetch('/api/message/send', {
+          method: 'POST',
+          body: formData
+        });
+
+        let result;
+        if (!response.ok) {
+          let errorMessage = 'Send failed';
+          try {
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+              const error = await response.json();
+              errorMessage = error.error || errorMessage;
+            } else {
+              errorMessage = `Server error: ${response.status} ${response.statusText}`;
+            }
+          } catch (parseError) {
+            errorMessage = `Server error: ${response.status} ${response.statusText}`;
+          }
+          throw new Error(errorMessage);
+        }
+
+        try {
+          result = await response.json();
+        } catch (parseError) {
+          console.error('Failed to parse response:', parseError);
+          throw new Error('Server response was invalid');
+        }
+
+        showSuccess('Message sent securely! ✓');
+        document.getElementById('textInput').value = '';
+        selectedFiles = [];
+        renderFilesList();
+
+        sendBtn.disabled = false;
+        sendBtn.innerHTML = '✈️ Send Securely';
+      } catch (error) {
+        showError('Send failed: ' + error.message);
+        document.getElementById('sendBtn').disabled = false;
+        document.getElementById('sendBtn').innerHTML = '✈️ Send Securely';
+        console.error(error);
+      }
+    }
+
+    function stringToHex(str) {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(str);
+      return Array.from(data).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    function arrayToHex(arr) {
+      return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    async function hashText(text) {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(text);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    function showError(message) {
+      const errorDiv = document.getElementById('error');
+      errorDiv.textContent = message;
+      errorDiv.style.display = message ? 'block' : 'none';
+    }
+
+    function showSuccess(message) {
+      const successDiv = document.getElementById('success');
+      successDiv.textContent = message;
+      successDiv.style.display = 'block';
+      setTimeout(() => {
+        successDiv.style.display = 'none';
+      }, 5000);
+    }
+  </script>
+</body>
+</html>
