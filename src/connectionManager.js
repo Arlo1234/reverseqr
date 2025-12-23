@@ -4,10 +4,11 @@ const crypto = require('crypto');
  * Connection manager to track active sessions and DH exchanges
  */
 class ConnectionManager {
-  constructor() {
+  constructor(options = {}) {
     this.connections = new Map(); // connectionCode -> session data
-    this.sessionTimeout = 15 * 60 * 1000; // 15 minutes
-    this.cleanupInterval = 5 * 60 * 1000; // Cleanup every 5 minutes
+    // Allow configurable timeouts via options or environment variables
+    this.sessionTimeout = options.sessionTimeoutMs || parseInt(process.env.SESSION_TIMEOUT_MS || '900000'); // 15 minutes default
+    this.cleanupInterval = options.cleanupIntervalMs || parseInt(process.env.CLEANUP_INTERVAL_MS || '300000'); // 5 minutes default
     this.startCleanupTimer();
   }
 
@@ -135,3 +136,4 @@ class ConnectionManager {
 }
 
 module.exports = ConnectionManager;
+

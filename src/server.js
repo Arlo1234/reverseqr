@@ -1,8 +1,10 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const QRCode = require('qrcode');
 const multer = require('multer');
+require('dotenv').config();
 
 const ConnectionManager = require('./connectionManager');
 const { DiffieHellman, deriveEncryptionKey } = require('./diffieHellman');
@@ -14,6 +16,11 @@ const app = express();
 // Configuration
 const BASE_URL = process.env.BASE_URL || 'https://v0mcxr014hp6joe9.myfritz.net';
 const PORT = process.env.PORT || 3000;
+const MAX_FILE_SIZE_BYTES = parseInt(process.env.MAX_FILE_SIZE_BYTES || '5368709120'); // 5GB default
+const BODY_SIZE_LIMIT = process.env.BODY_SIZE_LIMIT || '1gb';
+const SESSION_TIMEOUT_MS = parseInt(process.env.SESSION_TIMEOUT_MS || '900000'); // 15 minutes default
+const CLEANUP_INTERVAL_MS = parseInt(process.env.CLEANUP_INTERVAL_MS || '300000'); // 5 minutes default
+const FILE_RETENTION_TIME = parseInt(process.env.FILE_RETENTION_TIME || '30') * 60 * 1000; // Convert minutes to milliseconds
 const UPLOAD_DIR = path.join(__dirname, '../public/uploads');
 
 // Ensure upload directory exists
@@ -21,9 +28,12 @@ if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 }
 
+// Map to track uploaded files and their creation timestamps
+const uploadedFiles = new Map();
+
 // Middleware
-app.use(express.json({ limit: '1gb' }));
-app.use(express.urlencoded({ limit: '1gb', extended: true }));
+app.use(express.json({ limit: BODY_SIZE_LIMIT }));
+app.use(express.urlencoded({ limit: BODY_SIZE_LIMIT, extended: true }));
 app.use(express.static(path.join(__dirname, '../public')));
 
 // Multer for file uploads - use disk storage to support files > 2GB
@@ -32,22 +42,60 @@ const storage = multer.diskStorage({
     cb(null, UPLOAD_DIR);
   },
   filename: (req, file, cb) => {
-    cb(null, `${Date.now()}_${Math.random().toString(36).substr(2, 9)}_${file.originalname}`);
+    // Use random filename without original name for privacy
+    const randomName = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}_${crypto.randomBytes(8).toString('hex')}`;
+    cb(null, randomName);
   }
 });
 
 const upload = multer({ 
   storage,
   limits: { 
-    fileSize: 5 * 1024 * 1024 * 1024  // 5GB limit
+    fileSize: MAX_FILE_SIZE_BYTES
   }
 });
 
 // Connection manager
-const connManager = new ConnectionManager();
+const connManager = new ConnectionManager({
+  sessionTimeoutMs: SESSION_TIMEOUT_MS,
+  cleanupIntervalMs: CLEANUP_INTERVAL_MS
+});
 
 // Store DH instances temporarily (keyed by connection code)
 const dhInstances = new Map();
+
+// ============ FILE CLEANUP FUNCTIONALITY ============
+
+/**
+ * Clean up expired uploaded files
+ */
+function cleanupExpiredFiles() {
+  const now = Date.now();
+  const filesToDelete = [];
+
+  // Find files that have expired
+  for (const [filename, createdAt] of uploadedFiles.entries()) {
+    if (now - createdAt > FILE_RETENTION_TIME) {
+      filesToDelete.push(filename);
+    }
+  }
+
+  // Delete expired files
+  filesToDelete.forEach((filename) => {
+    const filepath = path.join(UPLOAD_DIR, filename);
+    fs.unlink(filepath, (err) => {
+      if (err && err.code !== 'ENOENT') {
+        console.error(`Error deleting file ${filename}:`, err);
+      } else {
+        console.log(`✓ Deleted expired file: ${filename}`);
+      }
+    });
+    uploadedFiles.delete(filename);
+  });
+}
+
+// Start cleanup timer
+const cleanupInterval = setInterval(cleanupExpiredFiles, CLEANUP_INTERVAL_MS);
 
 // ============ ROUTES ============
 
@@ -177,12 +225,49 @@ app.post('/api/dh/exchange', (req, res) => {
   }
 });
 
-/**
- * API: Send encrypted message/files
- */
 app.post('/api/message/send', upload.array('files'), (req, res) => {
   try {
     let { code, messageType, ciphertext, iv, authTag, hash, text } = req.body;
+    console.log('[SERVER /api/message/send] messageType:', messageType);
+    console.log('[SERVER] Files received:', req.files ? req.files.length : 0);
+    console.log('[SERVER] Body keys:', Object.keys(req.body));
+    
+    // Handle file IVs and hashes from FormData
+    // Note: form-data parser converts 'fileIvs[]' to 'fileIvs' when parsing multipart
+    let fileIvs = [];
+    let fileHashes = [];
+    let fileNames = [];
+    let fileNameIvs = [];
+    
+    // Try both forms: 'fileIvs[]' and 'fileIvs' (form-data strips the brackets)
+    const ivKey = req.body['fileIvs[]'] !== undefined ? 'fileIvs[]' : 'fileIvs';
+    const hashKey = req.body['fileHashes[]'] !== undefined ? 'fileHashes[]' : 'fileHashes';
+    const nameKey = req.body['fileNames[]'] !== undefined ? 'fileNames[]' : 'fileNames';
+    const nameIvKey = req.body['fileNameIvs[]'] !== undefined ? 'fileNameIvs[]' : 'fileNameIvs';
+    
+    if (req.body[ivKey]) {
+      fileIvs = Array.isArray(req.body[ivKey]) 
+        ? req.body[ivKey] 
+        : [req.body[ivKey]];
+    }
+    
+    if (req.body[hashKey]) {
+      fileHashes = Array.isArray(req.body[hashKey]) 
+        ? req.body[hashKey] 
+        : [req.body[hashKey]];
+    }
+    
+    if (req.body[nameKey]) {
+      fileNames = Array.isArray(req.body[nameKey]) 
+        ? req.body[nameKey] 
+        : [req.body[nameKey]];
+    }
+    
+    if (req.body[nameIvKey]) {
+      fileNameIvs = Array.isArray(req.body[nameIvKey]) 
+        ? req.body[nameIvKey] 
+        : [req.body[nameIvKey]];
+    }
 
     if (!code) {
       return res.status(400).json({ error: 'Code is required' });
@@ -212,7 +297,7 @@ app.post('/api/message/send', upload.array('files'), (req, res) => {
         text: text || ''
       };
     } else if (messageType === 'files') {
-      // Handle file uploads
+      // Handle encrypted file uploads
       if (!req.files || req.files.length === 0) {
         return res.status(400).json({ error: 'No files provided' });
       }
@@ -223,12 +308,21 @@ app.post('/api/message/send', upload.array('files'), (req, res) => {
         const file = req.files[i];
         // With disk storage, files are already saved - just reference them
         const filename = file.filename; // filename from disk storage
+        const iv = fileIvs[i] || '';
+        const hash = fileHashes[i] || '';
+        const encryptedName = fileNames[i] || '';
+        const nameIv = fileNameIvs[i] || '';
+
+        // Track the file for cleanup
+        uploadedFiles.set(filename, Date.now());
 
         encryptedFiles.push({
           filename,
-          originalName: file.originalname,
           size: file.size,
-          hash: hash || ''
+          iv: iv,
+          hash: hash,
+          encryptedName: encryptedName,
+          nameIv: nameIv
         });
       }
 
@@ -375,11 +469,18 @@ const server = app.listen(PORT, () => {
   console.log(`📊 Receiver: ${BASE_URL}/`);
   console.log(`📤 Sender: ${BASE_URL}/sender`);
   console.log(`🔄 Alternative Receiver: ${BASE_URL}/receiver`);
+  console.log(`\n⚙️  Configuration:`);
+  console.log(`   • Max file size: ${(MAX_FILE_SIZE_BYTES / 1024 / 1024 / 1024).toFixed(1)}GB`);
+  console.log(`   • Body size limit: ${BODY_SIZE_LIMIT}`);
+  console.log(`   • Session timeout: ${SESSION_TIMEOUT_MS / 1000 / 60} minutes`);
+  console.log(`   • File retention: ${FILE_RETENTION_TIME / 1000 / 60} minutes`);
+  console.log(`   • Cleanup interval: ${CLEANUP_INTERVAL_MS / 1000 / 60} minutes\n`);
 });
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully...');
+  clearInterval(cleanupInterval);
   connManager.stopCleanupTimer();
   server.close(() => {
     console.log('Server closed');
@@ -389,6 +490,7 @@ process.on('SIGTERM', () => {
 
 process.on('SIGINT', () => {
   console.log('SIGINT received, shutting down gracefully...');
+  clearInterval(cleanupInterval);
   connManager.stopCleanupTimer();
   server.close(() => {
     console.log('Server closed');

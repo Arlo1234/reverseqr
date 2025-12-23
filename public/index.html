@@ -147,6 +147,10 @@
       margin-top: 10px;
     }
 
+    .file-item-container {
+      margin-bottom: 12px;
+    }
+
     .file-item {
       background: white;
       padding: 10px;
@@ -154,7 +158,6 @@
       font-size: 13px;
       color: #667eea;
       cursor: pointer;
-      margin-bottom: 8px;
       text-decoration: none;
       display: block;
       transition: background 0.2s;
@@ -162,6 +165,20 @@
 
     .file-item:hover {
       background: #f0f0f0;
+    }
+
+    .file-hash {
+      font-size: 11px;
+      color: #999;
+      margin-top: 4px;
+      padding-left: 10px;
+    }
+
+    .file-hash code {
+      background: #f5f5f5;
+      padding: 2px 4px;
+      border-radius: 3px;
+      font-family: monospace;
     }
 
     .spinner {
@@ -220,7 +237,7 @@
 </head>
 <body>
   <div class="container">
-    <h1>🔒 ReverseQR</h1>
+    <h1>ReverseQR</h1>
     <p class="subtitle">Secure File & Text Sharing</p>
 
     <div id="error" class="error" style="display: none;"></div>
@@ -275,6 +292,14 @@
         const qrImage = document.getElementById('qrCode');
         qrImage.src = data.qrCode;
 
+        // Derive encryption key from connection code immediately
+        encryptionKey = await deriveEncryptionKeyFromCode(data.code);
+        if (encryptionKey) {
+          console.log('Encryption key derived for receiver');
+        } else {
+          console.error('Failed to derive encryption key');
+        }
+
         // Start polling for messages
         startMessagePolling();
       } catch (error) {
@@ -283,6 +308,8 @@
       }
     }
 
+    let displayedMessageIds = new Set();
+
     async function startMessagePolling() {
       const pollInterval = setInterval(async () => {
         try {
@@ -290,9 +317,22 @@
           const data = await response.json();
 
           if (data.messages && data.messages.length > 0) {
-            clearInterval(pollInterval);
             console.log('Messages received:', data.messages);
-            displayMessages(data.messages);
+            
+            // Filter out already displayed messages
+            const newMessages = data.messages.filter(msg => {
+              const msgId = msg.timestamp || msg.data?.timestamp;
+              return msgId && !displayedMessageIds.has(msgId);
+            });
+            
+            if (newMessages.length > 0) {
+              // Track these message IDs as displayed
+              newMessages.forEach(msg => {
+                const msgId = msg.timestamp || msg.data?.timestamp;
+                if (msgId) displayedMessageIds.add(msgId);
+              });
+              displayMessages(newMessages);
+            }
           }
         } catch (error) {
           console.error('Error polling for messages:', error);
@@ -306,12 +346,47 @@
       }, 300000);
     }
 
+    async function deriveEncryptionKeyFromCode(code) {
+      try {
+        const encoder = new TextEncoder();
+        const codeData = encoder.encode(code);
+        
+        // Use the code as both the input key material and salt
+        const keyMaterial = await crypto.subtle.importKey(
+          'raw',
+          codeData,
+          { name: 'PBKDF2' },
+          false,
+          ['deriveBits']
+        );
+        
+        const derivedBits = await crypto.subtle.deriveBits(
+          {
+            name: 'PBKDF2',
+            salt: codeData,
+            hash: 'SHA-256',
+            iterations: 100000
+          },
+          keyMaterial,
+          256
+        );
+        
+        return new Uint8Array(derivedBits);
+      } catch (error) {
+        console.error('Error deriving encryption key:', error);
+        return null;
+      }
+    }
+
     async function displayMessages(messages) {
       const messagesSection = document.getElementById('messagesSection');
       const messagesList = document.getElementById('messagesList');
       messagesSection.style.display = 'block';
 
-      messagesList.innerHTML = '';
+      // Only clear on first display (when messagesList is empty)
+      if (messagesList.children.length === 0) {
+        messagesList.innerHTML = '';
+      }
 
       for (const msgWrapper of messages) {
         // Handle both direct msg.type and msg.data.type formats
@@ -320,18 +395,49 @@
         msgDiv.className = 'message';
 
         if (msg.type === 'text') {
-          const decrypted = msg.text || decryptMessage(msg.ciphertext, msg.iv, msg.authTag);
-          const verified = verifyHash(decrypted, msg.hash);
+          // Decrypt the text message - must have ciphertext
+          let decrypted = '';
+          
+          if (msg.ciphertext && msg.iv && encryptionKey) {
+            decrypted = await decryptText(msg.ciphertext, msg.iv, encryptionKey);
+          } else if (msg.text) {
+            // Fallback to plain text if no encryption
+            decrypted = msg.text;
+          } else {
+            decrypted = '[Unable to decrypt message]';
+          }
+          
+          const verified = await verifyHash(decrypted, msg.hash);
+          const hashDisplay = msg.hash ? msg.hash : 'N/A';
+          const hashWords = msg.hash ? await hashToWords(msg.hash) : 'N/A';
 
           msgDiv.innerHTML = `
             <div class="message-type">📝 Text Message</div>
             <div class="message-text">${escapeHtml(decrypted)}</div>
+            <div class="file-hash">Hash: <code>${hashWords}</code></div>
             ${verified ? '<div class="hash-verification">✓ Hash verified</div>' : '<div class="hash-verification" style="color: #c53030;">✗ Hash verification failed</div>'}
           `;
         } else if (msg.type === 'files') {
-          const filesHtml = msg.files && msg.files.length > 0
-            ? msg.files.map(f => `<a href="#" class="file-item" onclick="downloadFile('${f.filename}', '${escapeHtml(f.originalName)}', '${f.iv || ''}', '${f.authTag || ''}', '${f.hash || ''}'); return false;">📥 ${escapeHtml(f.originalName)}</a>`).join('')
-            : '<p style="color: #999;">No files</p>';
+          let filesHtml = '';
+          if (msg.files && msg.files.length > 0) {
+            filesHtml = await Promise.all(msg.files.map(async (f) => {
+              let displayName = f.originalName;
+              // Decrypt the file name if encrypted
+              if (f.encryptedName && f.nameIv && encryptionKey) {
+                displayName = await decryptText(f.encryptedName, f.nameIv, encryptionKey);
+              }
+              const hashDisplay = f.hash ? await hashToWords(f.hash) : 'N/A';
+              const fileHash = f.hash ? f.hash : '';
+              return `
+                <div class="file-item-container">
+                  <a href="#" class="file-item file-download-link" data-filename="${f.filename}" data-name="${displayName}" data-iv="${f.iv || ''}" data-hash="${fileHash}" data-size="${f.size || 0}" style="cursor: pointer;">📥 ${escapeHtml(displayName)}</a>
+                  <div class="file-hash">Hash: <code>${hashDisplay}</code></div>
+                </div>
+              `;
+            })).then(results => results.join(''));
+          } else {
+            filesHtml = '<p style="color: #999;">No files</p>';
+          }
           
           msgDiv.innerHTML = `
             <div class="message-type">📦 Files</div>
@@ -346,12 +452,12 @@
     }
 
     function decryptMessage(ciphertext, iv, authTag) {
-      // For now, show the original text if available
-      // In production, decrypt using the shared secret key from DH exchange
+      // This is now called with encrypted data that needs decryption
+      // Since we're using Web Crypto API on the client, we need async handling
+      // For now, return a promise that will be handled in displayMessages
       try {
         if (!ciphertext) return '[No message content]';
-        // Currently just return the hex-encoded text (placeholder)
-        // TODO: Implement actual AES-256-GCM decryption
+        // Return hex string for async decryption
         return ciphertext;
       } catch (e) {
         console.error('Decryption error:', e);
@@ -359,14 +465,143 @@
       }
     }
 
-    function verifyHash(data, expectedHash) {
-      // Placeholder for hash verification
-      return true;
+    async function decryptText(ciphertext, iv, encryptionKey) {
+      try {
+        if (!ciphertext || !iv) return '[No message content]';
+        
+        const ciphertextBuffer = hexToArray(ciphertext);
+        const ivBuffer = hexToArray(iv);
+        
+        const key = await crypto.subtle.importKey(
+          'raw',
+          encryptionKey,
+          { name: 'AES-GCM' },
+          false,
+          ['decrypt']
+        );
+        
+        const decrypted = await crypto.subtle.decrypt(
+          {
+            name: 'AES-GCM',
+            iv: ivBuffer
+          },
+          key,
+          ciphertextBuffer
+        );
+        
+        const decoder = new TextDecoder();
+        return decoder.decode(decrypted);
+      } catch (e) {
+        console.error('Text decryption error:', e);
+        return '[Decryption failed]';
+      }
     }
 
-    async function downloadFile(filename, originalName, iv, authTag, hash) {
+    async function decryptFileData(encryptedBuffer, iv, encryptionKey) {
       try {
-        console.log(`Downloading: ${originalName}`);
+        if (!encryptedBuffer || !iv) return null;
+        
+        const ivBuffer = hexToArray(iv);
+        
+        const key = await crypto.subtle.importKey(
+          'raw',
+          encryptionKey,
+          { name: 'AES-GCM' },
+          false,
+          ['decrypt']
+        );
+        
+        const decrypted = await crypto.subtle.decrypt(
+          {
+            name: 'AES-GCM',
+            iv: ivBuffer
+          },
+          key,
+          encryptedBuffer
+        );
+        
+        return decrypted;
+      } catch (e) {
+        console.error('File decryption error:', e);
+        return null;
+      }
+    }
+
+    function hexToArray(hex) {
+      const bytes = [];
+      for (let i = 0; i < hex.length; i += 2) {
+        bytes.push(parseInt(hex.substr(i, 2), 16));
+      }
+      return new Uint8Array(bytes);
+    }
+
+    function verifyHash(data, expectedHash) {
+      if (!expectedHash) return false;
+      
+      // Data can be either string or Uint8Array
+      let buffer;
+      if (typeof data === 'string') {
+        buffer = new TextEncoder().encode(data);
+      } else if (data instanceof Uint8Array) {
+        buffer = data;
+      } else {
+        return false;
+      }
+      
+      // Compute SHA256 of the data
+      return crypto.subtle.digest('SHA-256', buffer).then(hashBuffer => {
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        return hashHex === expectedHash;
+      });
+    }
+
+    async function hashToWords(hashHex) {
+      // Load EFF wordlist
+      const response = await fetch('/eff_wordlist.json');
+      const data = await response.json();
+      const wordlist = data.eff_wordlist;
+      const listLength = wordlist.length;
+      
+      // Convert hex hash to bytes
+      const hashBytes = [];
+      for (let i = 0; i < hashHex.length; i += 2) {
+        hashBytes.push(parseInt(hashHex.substr(i, 2), 16));
+      }
+      
+      // Take first 6 bytes (48 bits) of hash and split into 3 chunks
+      // Each chunk is used with modulo to get wordlist index
+      const words = [];
+      for (let i = 0; i < 3; i++) {
+        const byte1 = hashBytes[i * 2] || 0;
+        const byte2 = hashBytes[i * 2 + 1] || 0;
+        const twoBytes = (byte1 << 8) | byte2;
+        const index = twoBytes % listLength;
+        words.push(wordlist[index]);
+      }
+      
+      return words.join(' ');
+    }
+
+    async function downloadFile(filename, originalName, iv, hash, fileSize) {
+      try {
+        console.log('[RECEIVER] Downloading file:', originalName, 'Hash:', hash, 'Hash Length:', hash.length);
+        if (!iv) {
+          alert('Missing IV for file decryption - file cannot be decrypted');
+          return;
+        }
+        
+        if (!encryptionKey) {
+          alert('Encryption key not available - unable to decrypt file');
+          return;
+        }
+        
+        // Warn user if file is large (> 50MB)
+        if (fileSize > 52428800) {
+          const fileSizeMB = (fileSize / 1048576).toFixed(2);
+          const proceed = confirm(`⏳ This file is ${fileSizeMB} MB. Downloading and decrypting large files may take a moment. Please be patient.\n\nContinue?`);
+          if (!proceed) return;
+        }
         
         // Fetch the encrypted file from the server
         const response = await fetch(`/api/file/download/${encodeURIComponent(filename)}`);
@@ -376,13 +611,28 @@
           return;
         }
         
-        // Get the file as a blob
-        const blob = await response.blob();
+        // Get the file as an array buffer
+        const encryptedBuffer = await response.arrayBuffer();
         
-        // In production, decrypt the blob using the shared secret key from DH exchange
-        // For now, just download the encrypted file
+        // Decrypt the file
+        const decryptedBuffer = await decryptFileData(encryptedBuffer, iv, encryptionKey);
+        if (!decryptedBuffer) {
+          alert('Failed to decrypt file');
+          return;
+        }
         
-        // Create a download link
+        // Verify hash if provided
+        if (hash) {
+          const hashArray = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', decryptedBuffer)));
+          const computedHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+          
+          if (computedHash !== hash) {
+            alert('⚠️ Warning: Hash verification failed! The file may have been corrupted or tampered with.');
+          }
+        }
+        
+        // Create a download link for the decrypted file
+        const blob = new Blob([decryptedBuffer]);
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
@@ -391,8 +641,6 @@
         link.click();
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
-        
-        console.log(`Downloaded: ${originalName}`);
       } catch (error) {
         console.error('Error downloading file:', error);
         alert(`Error downloading file: ${error.message}`);
@@ -427,6 +675,20 @@
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
     }
+
+    // Event delegation for file download links
+    document.addEventListener('click', function(e) {
+      const link = e.target.closest('.file-download-link');
+      if (link) {
+        e.preventDefault();
+        const filename = link.dataset.filename;
+        const name = link.dataset.name;
+        const iv = link.dataset.iv;
+        const hash = link.dataset.hash;
+        const size = parseInt(link.dataset.size) || 0;
+        downloadFile(filename, name, iv, hash, size);
+      }
+    });
 
     // Initialize on page load
     window.addEventListener('DOMContentLoaded', initializeReceiver);
