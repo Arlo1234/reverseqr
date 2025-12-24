@@ -68,33 +68,51 @@ const dhInstances = new Map();
 
 /**
  * Clean up expired uploaded files
+ * Scans the actual filesystem to catch files from previous server sessions
  */
 function cleanupExpiredFiles() {
   const now = Date.now();
-  const filesToDelete = [];
+  let deletedCount = 0;
 
-  // Find files that have expired
-  for (const [filename, createdAt] of uploadedFiles.entries()) {
-    if (now - createdAt > FILE_RETENTION_TIME) {
-      filesToDelete.push(filename);
-    }
-  }
-
-  // Delete expired files
-  filesToDelete.forEach((filename) => {
-    const filepath = path.join(UPLOAD_DIR, filename);
-    fs.unlink(filepath, (err) => {
-      if (err && err.code !== 'ENOENT') {
-        console.error(`Error deleting file ${filename}:`, err);
-      } else {
-        console.log(`✓ Deleted expired file: ${filename}`);
+  try {
+    // Read all files in the upload directory
+    const files = fs.readdirSync(UPLOAD_DIR);
+    
+    files.forEach((filename) => {
+      const filepath = path.join(UPLOAD_DIR, filename);
+      
+      try {
+        // Get file stats to check creation time
+        const stats = fs.statSync(filepath);
+        const fileAge = now - stats.mtimeMs; // Use modification time
+        
+        // If file is older than retention time, delete it
+        if (fileAge > FILE_RETENTION_TIME) {
+          fs.unlinkSync(filepath);
+          uploadedFiles.delete(filename); // Also remove from map if present
+          console.log(`✓ Deleted expired file: ${filename} (age: ${Math.round(fileAge / 1000 / 60)} min)`);
+          deletedCount++;
+        }
+      } catch (err) {
+        if (err.code !== 'ENOENT') {
+          console.error(`Error processing file ${filename}:`, err.message);
+        }
       }
     });
-    uploadedFiles.delete(filename);
-  });
+    
+    if (deletedCount > 0) {
+      console.log(`🧹 Cleanup complete: deleted ${deletedCount} expired file(s)`);
+    }
+  } catch (err) {
+    console.error('Error during cleanup:', err.message);
+  }
 }
 
-// Start cleanup timer
+// Run cleanup on startup to clean up files from previous sessions
+console.log('🧹 Running initial cleanup of expired files...');
+cleanupExpiredFiles();
+
+// Start cleanup timer for recurring cleanup
 const cleanupInterval = setInterval(cleanupExpiredFiles, CLEANUP_INTERVAL_MS);
 
 // ============ ROUTES ============
