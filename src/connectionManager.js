@@ -125,7 +125,7 @@ class ConnectionManager {
       clearInterval(this.cleanupTimer);
     }
   }
-
+  
   /**
    * Delete a connection
    * @param {string} code - Connection code

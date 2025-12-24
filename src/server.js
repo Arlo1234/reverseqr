@@ -122,17 +122,16 @@ app.get('/receiver', (req, res) => {
 
 /**
  * API: Create a new receiver session (receiver initiates)
+ * Now accepts the receiver's DH public key from the browser
  */
 app.post('/api/session/create', async (req, res) => {
   try {
-    // Create DH for receiver
-    const dh = new DiffieHellman();
+    const { initiatorDhPublicKey } = req.body;
+    
     const code = connManager.createConnection({
       mode: 'receiver',
-      initiatorDhPublicKey: dh.getPublicKeyHex()
+      initiatorDhPublicKey: initiatorDhPublicKey || null
     });
-
-    dhInstances.set(code, dh);
 
     // Generate QR code URL
     const qrUrl = `${BASE_URL}/join?code=${code}`;
@@ -156,10 +155,11 @@ app.post('/api/session/create', async (req, res) => {
 
 /**
  * API: Join an existing session as sender
+ * Now accepts the sender's DH public key from the browser
  */
 app.post('/api/session/join', (req, res) => {
   try {
-    let { code } = req.body;
+    let { code, responderDhPublicKey } = req.body;
 
     if (!code) {
       return res.status(400).json({ error: 'Code is required' });
@@ -173,17 +173,15 @@ app.post('/api/session/join', (req, res) => {
       return res.status(404).json({ error: 'Connection not found' });
     }
 
-    // Create DH for sender
-    const dh = new DiffieHellman();
-    dhInstances.set(`${code}_sender`, dh);
-
-    // Store sender's DH public key
-    connManager.setResponderPublicKey(code, dh.getPublicKeyHex());
+    // Store sender's DH public key if provided
+    if (responderDhPublicKey) {
+      connManager.setResponderPublicKey(code, responderDhPublicKey);
+    }
 
     res.json({
       success: true,
       initiatorPublicKey: conn.initiatorDhPublicKey,
-      responderPublicKey: dh.getPublicKeyHex(),
+      responderPublicKey: conn.responderDhPublicKey,
       code
     });
   } catch (error) {
@@ -193,7 +191,35 @@ app.post('/api/session/join', (req, res) => {
 });
 
 /**
- * API: Exchange DH keys and get shared secret
+ * API: Get session status and DH public keys (for receiver to poll for sender's key)
+ */
+app.get('/api/session/status/:code', (req, res) => {
+  try {
+    let code = req.params.code;
+    if (!code) {
+      return res.status(400).json({ error: 'Code is required' });
+    }
+    
+    code = code.toUpperCase();
+    const conn = connManager.getConnection(code);
+    
+    if (!conn) {
+      return res.status(404).json({ error: 'Connection not found' });
+    }
+
+    res.json({
+      status: conn.status,
+      initiatorPublicKey: conn.initiatorDhPublicKey,
+      responderPublicKey: conn.responderDhPublicKey
+    });
+  } catch (error) {
+    console.error('Error getting session status:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * API: Exchange DH keys and get shared secret (legacy - no longer needed with browser-side DH)
  */
 app.post('/api/dh/exchange', (req, res) => {
   try {
