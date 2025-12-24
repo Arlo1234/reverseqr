@@ -41,9 +41,9 @@ function parseSize(sizeStr) {
 }
 
 // Configuration
-const BASE_URL = process.env.BASE_URL || 'https://v0mcxr014hp6joe9.myfritz.net';
+const BASE_URL = process.env.BASE_URL || 'https://localhost';
 const PORT = process.env.PORT || 3000;
-const MAX_FILE_SIZE_BYTES = parseSize(process.env.MAX_FILE_SIZE_BYTES) || 5368709120; // 5GB default
+const MAX_FILE_SIZE_BYTES = parseSize(process.env.MAX_FILE_SIZE_BYTES) || 1000000000; // 1GB default
 const BODY_SIZE_LIMIT = process.env.BODY_SIZE_LIMIT || '1gb';
 const SESSION_TIMEOUT_MS = parseInt(process.env.SESSION_TIMEOUT_MS || '900000'); // 15 minutes default
 const CLEANUP_INTERVAL_MS = parseInt(process.env.CLEANUP_INTERVAL_MS || '300000'); // 5 minutes default
@@ -63,7 +63,7 @@ app.use(express.json({ limit: BODY_SIZE_LIMIT }));
 app.use(express.urlencoded({ limit: BODY_SIZE_LIMIT, extended: true }));
 app.use(express.static(path.join(__dirname, '../public')));
 
-// Multer for file uploads - use disk storage to support files > 2GB
+// Multer for file uploads - use disk storage to support large files
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, UPLOAD_DIR);
