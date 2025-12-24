@@ -98,7 +98,7 @@ let connectionCode = null;
             encryptionKey = await deriveKeyFromSharedSecret(sharedSecret);
             console.log('Receiver: Encryption key established via DH');
             
-            // Display the security fingerprint
+            // Display the security fingerprint and hide loading status
             try {
               const keyHash = await hashBuffer(encryptionKey);
               const keyWords = await hashToWords(keyHash);
@@ -106,6 +106,11 @@ let connectionCode = null;
               if (keyHashDisplay) {
                 keyHashDisplay.innerHTML = `<strong>🔐 Security Fingerprint:</strong><br><span class="key-words">${keyWords}</span>`;
                 keyHashDisplay.style.display = 'block';
+              }
+              // Hide the loading status
+              const status = document.querySelector('.status');
+              if (status) {
+                status.style.display = 'none';
               }
             } catch (hashError) {
               console.error('Error displaying key hash:', hashError);

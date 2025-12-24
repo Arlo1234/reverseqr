@@ -82,8 +82,14 @@ let connectionCode = null;
     async function displayMessages(messages) {
       const messagesSection = document.getElementById('messagesSection');
       const messagesList = document.getElementById('messagesList');
+      const status = document.querySelector('.status');
+      
+      // Hide the waiting status
+      if (status) {
+        status.style.display = 'none';
+      }
+      
       messagesSection.style.display = 'block';
-
       messagesList.innerHTML = '';
 
       for (const msg of messages) {
