@@ -1,6 +1,121 @@
 let connectionCode = null;
     let encryptionKey = null;
     let dhKeyPair = null;  // Our DH key pair
+    let ws = null;  // WebSocket connection
+
+    // Set up WebSocket connection
+    function setupWebSocket() {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}`;
+      
+      ws = new WebSocket(wsUrl);
+      
+      ws.onopen = () => {
+        console.log('WebSocket connected');
+        // Subscribe to session as receiver
+        if (connectionCode) {
+          ws.send(JSON.stringify({
+            type: 'subscribe',
+            code: connectionCode,
+            role: 'receiver'
+          }));
+        }
+      };
+      
+      ws.onmessage = async (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          console.log('WebSocket message:', data);
+          
+          if (data.type === 'sender-key-available' && data.responderPublicKey) {
+            // Sender's public key is now available
+            await handleSenderKeyAvailable(data.responderPublicKey);
+          } else if (data.type === 'message-available') {
+            // New message available, fetch it
+            await fetchAndDisplayMessages();
+          } else if (data.type === 'keys-available' && data.responderPublicKey) {
+            // Keys were already available when we subscribed
+            await handleSenderKeyAvailable(data.responderPublicKey);
+          }
+        } catch (error) {
+          console.error('WebSocket message error:', error);
+        }
+      };
+      
+      ws.onclose = () => {
+        console.log('WebSocket disconnected, attempting reconnect...');
+        setTimeout(setupWebSocket, 2000);
+      };
+      
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+      };
+    }
+
+    // Handle when sender's public key becomes available
+    async function handleSenderKeyAvailable(senderPublicKeyHex) {
+      if (encryptionKey) {
+        // Already have encryption key, ignore duplicate
+        return;
+      }
+      
+      console.log('Receiver: Got sender public key via WebSocket, computing shared secret');
+      
+      // Import sender's public key and compute shared secret
+      const senderPublicKey = await importPublicKey(senderPublicKeyHex);
+      const sharedSecret = await computeSharedSecret(dhKeyPair.privateKey, senderPublicKey);
+      
+      // Derive encryption key from shared secret using HKDF
+      encryptionKey = await deriveKeyFromSharedSecret(sharedSecret);
+      console.log('Receiver: Encryption key established via DH');
+      
+      // Display the security fingerprint and hide loading status
+      try {
+        const keyHash = await hashBuffer(encryptionKey);
+        const keyWords = await hashToWords(keyHash);
+        const keyHashDisplay = document.getElementById('keyHashDisplay');
+        if (keyHashDisplay) {
+          keyHashDisplay.innerHTML = `<strong>🔐 Security Fingerprint:</strong><br><span class="key-words">${keyWords}</span>`;
+          keyHashDisplay.style.display = 'block';
+        }
+        // Hide the loading status
+        const status = document.querySelector('.status');
+        if (status) {
+          status.style.display = 'none';
+        }
+      } catch (hashError) {
+        console.error('Error displaying key hash:', hashError);
+      }
+    }
+
+    // Fetch and display messages (called when WebSocket notifies us)
+    async function fetchAndDisplayMessages() {
+      try {
+        const response = await fetch(`/api/message/retrieve/${connectionCode}`);
+        const data = await response.json();
+
+        if (data.messages && data.messages.length > 0) {
+          console.log('Messages received:', data.messages);
+          
+          // Filter out already displayed messages
+          const newMessages = data.messages.filter(msg => {
+            const msgId = msg.timestamp || msg.data?.timestamp;
+            return msgId && !displayedMessageIds.has(msgId);
+          });
+          
+          if (newMessages.length > 0) {
+            // Track these message IDs as displayed
+            newMessages.forEach(msg => {
+              const msgId = msg.timestamp || msg.data?.timestamp;
+              if (msgId) displayedMessageIds.add(msgId);
+            });
+            displayMessages(newMessages);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching messages:', error);
+      }
+    }
 
     // Generate ECDH key pair in browser
     async function generateDHKeyPair() {
@@ -68,58 +183,12 @@ let connectionCode = null;
         const qrImage = document.getElementById('qrCode');
         qrImage.src = data.qrCode;
 
-        // Start polling for sender's public key
-        pollForSenderPublicKey();
-
-        // Start polling for messages
-        startMessagePolling();
+        // Set up WebSocket for real-time updates
+        setupWebSocket();
       } catch (error) {
         showError('Failed to create session: ' + error.message);
         console.error(error);
       }
-    }
-
-    // Poll for sender's public key and compute shared secret when available
-    async function pollForSenderPublicKey() {
-      const pollInterval = setInterval(async () => {
-        try {
-          const response = await fetch(`/api/session/status/${connectionCode}`);
-          const data = await response.json();
-
-          if (data.responderPublicKey) {
-            clearInterval(pollInterval);
-            console.log('Receiver: Got sender public key, computing shared secret');
-            
-            // Import sender's public key and compute shared secret
-            const senderPublicKey = await importPublicKey(data.responderPublicKey);
-            const sharedSecret = await computeSharedSecret(dhKeyPair.privateKey, senderPublicKey);
-            
-            // Derive encryption key from shared secret using HKDF
-            encryptionKey = await deriveKeyFromSharedSecret(sharedSecret);
-            console.log('Receiver: Encryption key established via DH');
-            
-            // Display the security fingerprint and hide loading status
-            try {
-              const keyHash = await hashBuffer(encryptionKey);
-              const keyWords = await hashToWords(keyHash);
-              const keyHashDisplay = document.getElementById('keyHashDisplay');
-              if (keyHashDisplay) {
-                keyHashDisplay.innerHTML = `<strong>🔐 Security Fingerprint:</strong><br><span class="key-words">${keyWords}</span>`;
-                keyHashDisplay.style.display = 'block';
-              }
-              // Hide the loading status
-              const status = document.querySelector('.status');
-              if (status) {
-                status.style.display = 'none';
-              }
-            } catch (hashError) {
-              console.error('Error displaying key hash:', hashError);
-            }
-          }
-        } catch (error) {
-          console.error('Error polling for sender key:', error);
-        }
-      }, 1000);
     }
 
     // Derive encryption key from shared secret using HKDF
@@ -147,42 +216,6 @@ let connectionCode = null;
     }
 
     let displayedMessageIds = new Set();
-
-    async function startMessagePolling() {
-      const pollInterval = setInterval(async () => {
-        try {
-          const response = await fetch(`/api/message/retrieve/${connectionCode}`);
-          const data = await response.json();
-
-          if (data.messages && data.messages.length > 0) {
-            console.log('Messages received:', data.messages);
-            
-            // Filter out already displayed messages
-            const newMessages = data.messages.filter(msg => {
-              const msgId = msg.timestamp || msg.data?.timestamp;
-              return msgId && !displayedMessageIds.has(msgId);
-            });
-            
-            if (newMessages.length > 0) {
-              // Track these message IDs as displayed
-              newMessages.forEach(msg => {
-                const msgId = msg.timestamp || msg.data?.timestamp;
-                if (msgId) displayedMessageIds.add(msgId);
-              });
-              displayMessages(newMessages);
-            }
-          }
-        } catch (error) {
-          console.error('Error polling for messages:', error);
-        }
-      }, 2000); // Poll every 2 seconds
-      
-      // Stop polling after 5 minutes to prevent infinite polling
-      setTimeout(() => {
-        clearInterval(pollInterval);
-        console.log('Polling timeout reached (5 minutes)');
-      }, 300000);
-    }
 
     async function displayMessages(messages) {
       const messagesSection = document.getElementById('messagesSection');

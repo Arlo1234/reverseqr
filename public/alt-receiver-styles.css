@@ -251,7 +251,7 @@ h1 {
 }
 
 /* Message Item */
-.received-message {
+.message {
   background: var(--bg-light);
   border-left: 4px solid var(--success);
   padding: 16px;
@@ -268,7 +268,8 @@ h1 {
   letter-spacing: 0.5px;
 }
 
-.message-content {
+.message-content,
+.message-text {
   color: var(--text-primary);
   word-break: break-word;
   font-size: 14px;
@@ -277,6 +278,26 @@ h1 {
 
 .message-files {
   margin-top: 8px;
+}
+
+.file-item-container {
+  background: white;
+  padding: 10px;
+  border-radius: 6px;
+  margin-top: 6px;
+  font-size: 12px;
+  border: 1px solid var(--border-color);
+}
+
+.file-item {
+  color: var(--primary);
+  text-decoration: none;
+  display: block;
+  transition: color 0.2s ease;
+}
+
+.file-item:hover {
+  color: var(--primary-dark);
 }
 
 .message-file {

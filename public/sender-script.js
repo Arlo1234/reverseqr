@@ -3,6 +3,36 @@ let sentMessages = []; // Store sent messages for history
 let connectionCode = null;
 let encryptionKey = null;
 let connectedReceiver = false;
+let ws = null;  // WebSocket connection
+let dhKeyPairPending = null;  // Store DH key pair while waiting for receiver's key
+let receiverKeyResolver = null;  // Resolver for waiting on receiver's key
+let maxFileSize = 5 * 1024 * 1024 * 1024; // Default 5GB, will be updated from server
+
+// Fetch and display max file size on page load
+async function displayMaxFileSize() {
+  try {
+    const response = await fetch('/api/config');
+    const config = await response.json();
+    maxFileSize = config.maxFileSize; // Store for validation
+    const maxSizeElement = document.getElementById('maxSizeInfo');
+    if (maxSizeElement && config.maxFileSizeFormatted) {
+      maxSizeElement.textContent = `(Max: ${config.maxFileSizeFormatted})`;
+    }
+  } catch (error) {
+    console.error('Error fetching max file size:', error);
+    const maxSizeElement = document.getElementById('maxSizeInfo');
+    if (maxSizeElement) {
+      maxSizeElement.textContent = '(Max size configured on server)';
+    }
+  }
+}
+
+// Call on page load
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', displayMaxFileSize);
+} else {
+  displayMaxFileSize();
+}
 
 // RFC 1751 PGP Wordlist - Hex-indexed with word pairs (first=odd, second=even)
 const PGP_WORDLIST = {
@@ -399,7 +429,7 @@ function removeFile(idx) {
   renderFilesList();
 }
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024; // 5GB in bytes
+const MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024; // 5GB in bytes (deprecated - use maxFileSize instead)
 
 function formatFileSize(bytes) {
   if (bytes === 0) return '0 Bytes';
@@ -419,8 +449,8 @@ function escapeHtml(unsafe) {
 }
 
 function validateFileSize(file) {
-  if (file.size > MAX_FILE_SIZE) {
-    showError(`File "${file.name}" is too large. Maximum size is 5GB. File is ${formatFileSize(file.size)}.`);
+  if (file.size > maxFileSize) {
+    showError(`File "${file.name}" is too large. Maximum size is ${formatFileSize(maxFileSize)}. File is ${formatFileSize(file.size)}.`);
     return false;
   }
   return true;
@@ -490,35 +520,90 @@ async function deriveKeyFromSharedSecret(sharedSecret) {
   return new Uint8Array(derivedBits);
 }
 
-// Poll for receiver's public key and complete key exchange
-async function pollForReceiverPublicKey(code, dhKeyPair) {
-  return new Promise((resolve, reject) => {
-    const pollInterval = setInterval(async () => {
-      try {
-        const response = await fetch(`/api/session/status/${code}`);
-        const data = await response.json();
-
-        if (data.initiatorPublicKey) {
-          clearInterval(pollInterval);
-          console.log('Sender: Got receiver public key, completing key exchange');
-          
-          try {
-            await completeKeyExchange(dhKeyPair, data.initiatorPublicKey);
-            resolve();
-          } catch (error) {
-            clearInterval(pollInterval);
-            reject(error);
-          }
+// Set up WebSocket connection for real-time updates
+function setupWebSocket() {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = `${protocol}//${window.location.host}`;
+  
+  ws = new WebSocket(wsUrl);
+  
+  ws.onopen = () => {
+    console.log('WebSocket connected');
+    // Subscribe to session as sender
+    if (connectionCode) {
+      ws.send(JSON.stringify({
+        type: 'subscribe',
+        code: connectionCode,
+        role: 'sender'
+      }));
+    }
+  };
+  
+  ws.onmessage = async (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      console.log('WebSocket message:', data);
+      
+      if (data.type === 'receiver-key-available' && data.initiatorPublicKey) {
+        // Receiver's public key is now available
+        if (dhKeyPairPending && receiverKeyResolver) {
+          await completeKeyExchange(dhKeyPairPending, data.initiatorPublicKey);
+          receiverKeyResolver();
+          receiverKeyResolver = null;
+          dhKeyPairPending = null;
         }
-      } catch (error) {
-        console.error('Error polling for receiver key:', error);
+      } else if (data.type === 'keys-available' && data.initiatorPublicKey) {
+        // Keys were already available when we subscribed
+        if (dhKeyPairPending && receiverKeyResolver) {
+          await completeKeyExchange(dhKeyPairPending, data.initiatorPublicKey);
+          receiverKeyResolver();
+          receiverKeyResolver = null;
+          dhKeyPairPending = null;
+        }
       }
-    }, 1000);
+    } catch (error) {
+      console.error('WebSocket message error:', error);
+    }
+  };
+  
+  ws.onclose = () => {
+    console.log('WebSocket disconnected');
+    // Only reconnect if we're still connected to a session
+    if (connectionCode && connectedReceiver) {
+      setTimeout(setupWebSocket, 2000);
+    }
+  };
+  
+  ws.onerror = (error) => {
+    console.error('WebSocket error:', error);
+  };
+}
+
+// Wait for receiver's public key via WebSocket
+async function waitForReceiverPublicKey(code, dhKeyPair) {
+  return new Promise((resolve, reject) => {
+    dhKeyPairPending = dhKeyPair;
+    receiverKeyResolver = resolve;
+    
+    // Set up WebSocket if not already connected
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      setupWebSocket();
+    } else {
+      // Already connected, just subscribe
+      ws.send(JSON.stringify({
+        type: 'subscribe',
+        code: code,
+        role: 'sender'
+      }));
+    }
 
     // Timeout after 60 seconds
     setTimeout(() => {
-      clearInterval(pollInterval);
-      reject(new Error('Timeout waiting for receiver public key'));
+      if (receiverKeyResolver) {
+        receiverKeyResolver = null;
+        dhKeyPairPending = null;
+        reject(new Error('Timeout waiting for receiver public key'));
+      }
     }, 60000);
   });
 }
@@ -601,19 +686,23 @@ async function connectToReceiver() {
 
     if (!response.ok) {
       const error = await response.json();
+      // More specific error messages
+      if (response.status === 409) {
+        throw new Error('Another sender is already connected. Please ask the receiver to send a new code.');
+      }
       throw new Error(error.error || 'Connection failed');
     }
 
     const data = await response.json();
     connectionCode = data.code;
 
-    // If receiver's public key is not immediately available, poll for it
+    // If receiver's public key is not immediately available, wait via WebSocket
     if (!data.initiatorPublicKey) {
       status.innerHTML = '<span>Waiting for receiver to join...</span>';
       console.log('Sender: Waiting for receiver public key');
       
-      // Poll for receiver's public key
-      await pollForReceiverPublicKey(connectionCode, dhKeyPair);
+      // Wait for receiver's public key via WebSocket
+      await waitForReceiverPublicKey(connectionCode, dhKeyPair);
     } else {
       // Receiver is already connected, establish key immediately
       await completeKeyExchange(dhKeyPair, data.initiatorPublicKey);

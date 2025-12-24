@@ -1,5 +1,79 @@
 let connectionCode = null;
     let receiverDhPublicKey = null;
+    let ws = null;  // WebSocket connection
+    let displayedMessageIds = new Set();
+
+    // Set up WebSocket connection
+    function setupWebSocket() {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}`;
+      
+      ws = new WebSocket(wsUrl);
+      
+      ws.onopen = () => {
+        console.log('WebSocket connected');
+        // Subscribe to session as receiver
+        if (connectionCode) {
+          ws.send(JSON.stringify({
+            type: 'subscribe',
+            code: connectionCode,
+            role: 'receiver'
+          }));
+        }
+      };
+      
+      ws.onmessage = async (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          console.log('WebSocket message:', data);
+          
+          if (data.type === 'message-available') {
+            // New message available, fetch it
+            await fetchAndDisplayMessages();
+          }
+        } catch (error) {
+          console.error('WebSocket message error:', error);
+        }
+      };
+      
+      ws.onclose = () => {
+        console.log('WebSocket disconnected, attempting reconnect...');
+        setTimeout(setupWebSocket, 2000);
+      };
+      
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+      };
+    }
+
+    // Fetch and display messages (called when WebSocket notifies us)
+    async function fetchAndDisplayMessages() {
+      try {
+        const response = await fetch(`/api/message/retrieve/${connectionCode}`);
+        const data = await response.json();
+
+        if (data.messages && data.messages.length > 0) {
+          console.log('Messages received:', data.messages);
+          
+          // Filter out already displayed messages
+          const newMessages = data.messages.filter(msg => {
+            const msgId = msg.timestamp || msg.data?.timestamp;
+            return msgId && !displayedMessageIds.has(msgId);
+          });
+          
+          if (newMessages.length > 0) {
+            // Track these message IDs as displayed
+            newMessages.forEach(msg => {
+              const msgId = msg.timestamp || msg.data?.timestamp;
+              if (msgId) displayedMessageIds.add(msgId);
+            });
+            displayMessages(newMessages);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching messages:', error);
+      }
+    }
 
     async function startReceiving() {
       try {
@@ -55,28 +129,12 @@ let connectionCode = null;
           console.error('Error displaying key hash:', hashError);
         }
 
-        // Start polling for messages
-        startMessagePolling();
+        // Set up WebSocket for real-time message notifications
+        setupWebSocket();
       } catch (error) {
         showError('Failed to create session: ' + error.message);
         console.error(error);
       }
-    }
-
-    async function startMessagePolling() {
-      const pollInterval = setInterval(async () => {
-        try {
-          const response = await fetch(`/api/message/retrieve/${connectionCode}`);
-          const data = await response.json();
-
-          if (data.messages && data.messages.length > 0) {
-            clearInterval(pollInterval);
-            displayMessages(data.messages);
-          }
-        } catch (error) {
-          console.error('Error polling for messages:', error);
-        }
-      }, 2000);
     }
 
     async function displayMessages(messages) {

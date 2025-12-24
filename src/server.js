@@ -4,7 +4,8 @@ const fs = require('fs');
 const crypto = require('crypto');
 const QRCode = require('qrcode');
 const multer = require('multer');
-require('dotenv').config();
+const WebSocket = require('ws');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 const ConnectionManager = require('./connectionManager');
 const { DiffieHellman, deriveEncryptionKey } = require('./diffieHellman');
@@ -13,10 +14,36 @@ const { encodeToPgp, decodeFromPgp } = require('./pgpWordlist');
 
 const app = express();
 
+// Parse size strings like "100mb", "1gb", etc. into bytes
+function parseSize(sizeStr) {
+  if (typeof sizeStr === 'number') return sizeStr;
+  if (!sizeStr) return null;
+  
+  const match = sizeStr.toString().toLowerCase().match(/^(\d+(?:\.\d+)?)\s*(b|kb|mb|gb|tb)?$/);
+  if (!match) {
+    // Try parsing as plain number
+    const num = parseInt(sizeStr);
+    return isNaN(num) ? null : num;
+  }
+  
+  const value = parseFloat(match[1]);
+  const unit = match[2] || 'b';
+  
+  const multipliers = {
+    'b': 1,
+    'kb': 1024,
+    'mb': 1024 * 1024,
+    'gb': 1024 * 1024 * 1024,
+    'tb': 1024 * 1024 * 1024 * 1024
+  };
+  
+  return Math.floor(value * multipliers[unit]);
+}
+
 // Configuration
 const BASE_URL = process.env.BASE_URL || 'https://v0mcxr014hp6joe9.myfritz.net';
 const PORT = process.env.PORT || 3000;
-const MAX_FILE_SIZE_BYTES = parseInt(process.env.MAX_FILE_SIZE_BYTES || '5368709120'); // 5GB default
+const MAX_FILE_SIZE_BYTES = parseSize(process.env.MAX_FILE_SIZE_BYTES) || 5368709120; // 5GB default
 const BODY_SIZE_LIMIT = process.env.BODY_SIZE_LIMIT || '1gb';
 const SESSION_TIMEOUT_MS = parseInt(process.env.SESSION_TIMEOUT_MS || '900000'); // 15 minutes default
 const CLEANUP_INTERVAL_MS = parseInt(process.env.CLEANUP_INTERVAL_MS || '300000'); // 5 minutes default
@@ -63,6 +90,36 @@ const connManager = new ConnectionManager({
 
 // Store DH instances temporarily (keyed by connection code)
 const dhInstances = new Map();
+
+// Store WebSocket connections (keyed by connection code)
+// Each session can have multiple websocket clients (receiver + sender)
+const wsConnections = new Map();
+
+// Helper to broadcast to all clients in a session
+function broadcastToSession(code, message) {
+  const clients = wsConnections.get(code);
+  if (clients) {
+    const messageStr = JSON.stringify(message);
+    clients.forEach((ws) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(messageStr);
+      }
+    });
+  }
+}
+
+// Helper to notify specific role in a session
+function notifySessionRole(code, role, message) {
+  const clients = wsConnections.get(code);
+  if (clients) {
+    const messageStr = JSON.stringify(message);
+    clients.forEach((ws) => {
+      if (ws.readyState === WebSocket.OPEN && ws.role === role) {
+        ws.send(messageStr);
+      }
+    });
+  }
+}
 
 // ============ FILE CLEANUP FUNCTIONALITY ============
 
@@ -174,6 +231,7 @@ app.post('/api/session/create', async (req, res) => {
 /**
  * API: Join an existing session as sender
  * Now accepts the sender's DH public key from the browser
+ * Only one sender allowed per session
  */
 app.post('/api/session/join', (req, res) => {
   try {
@@ -191,9 +249,23 @@ app.post('/api/session/join', (req, res) => {
       return res.status(404).json({ error: 'Connection not found' });
     }
 
+    // Check if a sender is already connected
+    if (conn.senderConnected) {
+      return res.status(409).json({ error: 'A sender is already connected to this session. Only one sender allowed.' });
+    }
+
+    // Mark that a sender is now connected
+    conn.senderConnected = true;
+
     // Store sender's DH public key if provided
     if (responderDhPublicKey) {
       connManager.setResponderPublicKey(code, responderDhPublicKey);
+      
+      // Notify receiver via WebSocket that sender's key is available
+      notifySessionRole(code, 'receiver', {
+        type: 'sender-key-available',
+        responderPublicKey: responderDhPublicKey
+      });
     }
 
     res.json({
@@ -378,6 +450,13 @@ app.post('/api/message/send', upload.array('files'), (req, res) => {
 
     // Store the message
     connManager.storeMessage(code, messageData);
+    
+    // Notify receiver via WebSocket that a new message is available
+    notifySessionRole(code, 'receiver', {
+      type: 'message-available',
+      messageId: messageData.timestamp,
+      messageType: messageData.type
+    });
 
     res.json({
       success: true,
@@ -465,6 +544,19 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
+/**
+ * API: Get server configuration
+ */
+app.get('/api/config', (req, res) => {
+  res.json({
+    maxFileSize: MAX_FILE_SIZE_BYTES,
+    maxFileSizeFormatted: formatBytes(MAX_FILE_SIZE_BYTES),
+    bodyLimit: BODY_SIZE_LIMIT,
+    sessionTimeout: SESSION_TIMEOUT_MS,
+    fileRetention: FILE_RETENTION_TIME
+  });
+});
+
 // ============ ERROR HANDLING ============
 
 // Handle multer errors (file too large, etc.)
@@ -472,7 +564,7 @@ app.use((error, req, res, next) => {
   if (error instanceof multer.MulterError) {
     if (error.code === 'LIMIT_FILE_SIZE') {
       return res.status(413).json({ 
-        error: `File too large. Maximum size is 5GB. Received: ${formatBytes(error.limit)}`
+        error: `File too large. Maximum size is ${formatBytes(MAX_FILE_SIZE_BYTES)}`
       });
     }
     if (error.code === 'LIMIT_PART_COUNT') {
@@ -514,32 +606,158 @@ const server = app.listen(PORT, () => {
   console.log(`📤 Sender: ${BASE_URL}/sender`);
   console.log(`🔄 Alternative Receiver: ${BASE_URL}/receiver`);
   console.log(`\n⚙️  Configuration:`);
-  console.log(`   • Max file size: ${(MAX_FILE_SIZE_BYTES / 1024 / 1024 / 1024).toFixed(1)}GB`);
+  console.log(`   • Max file size: ${formatBytes(MAX_FILE_SIZE_BYTES)}`);
   console.log(`   • Body size limit: ${BODY_SIZE_LIMIT}`);
   console.log(`   • Session timeout: ${SESSION_TIMEOUT_MS / 1000 / 60} minutes`);
   console.log(`   • File retention: ${FILE_RETENTION_TIME / 1000 / 60} minutes`);
-  console.log(`   • Cleanup interval: ${CLEANUP_INTERVAL_MS / 1000 / 60} minutes\n`);
+  console.log(`   • Cleanup interval: ${CLEANUP_INTERVAL_MS / 1000 / 60} minutes`);
+  console.log(`   • WebSocket: enabled\n`);
 });
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received, shutting down gracefully...');
-  clearInterval(cleanupInterval);
-  connManager.stopCleanupTimer();
-  server.close(() => {
-    console.log('Server closed');
-    process.exit(0);
+// ============ WEBSOCKET SERVER ============
+
+const wss = new WebSocket.Server({ server });
+
+wss.on('connection', (ws) => {
+  console.log('WebSocket: New client connected');
+  
+  ws.isAlive = true;
+  ws.on('pong', () => { ws.isAlive = true; });
+  
+  ws.on('message', (message) => {
+    try {
+      const data = JSON.parse(message);
+      
+      // Handle subscription to a session
+      if (data.type === 'subscribe') {
+        const { code, role } = data;
+        if (!code) {
+          ws.send(JSON.stringify({ type: 'error', message: 'No session code provided' }));
+          return;
+        }
+        
+        // Store the session code and role on the websocket
+        ws.sessionCode = code;
+        ws.role = role || 'unknown';
+        
+        // Add this websocket to the session's client list
+        if (!wsConnections.has(code)) {
+          wsConnections.set(code, new Set());
+        }
+        wsConnections.get(code).add(ws);
+        
+        console.log(`WebSocket: ${ws.role} subscribed to session ${code}`);
+        ws.send(JSON.stringify({ type: 'subscribed', code, role: ws.role }));
+        
+        // Check if there's already data to send
+        const session = connManager.getConnection(code);
+        if (session) {
+          // If receiver subscribes and sender's key is available, notify immediately
+          if (ws.role === 'receiver' && session.responderDhPublicKey) {
+            ws.send(JSON.stringify({
+              type: 'sender-key-available',
+              responderPublicKey: session.responderDhPublicKey
+            }));
+          }
+          // If sender subscribes and receiver's key is available, notify immediately
+          if (ws.role === 'sender' && session.initiatorDhPublicKey) {
+            ws.send(JSON.stringify({
+              type: 'receiver-key-available',
+              initiatorPublicKey: session.initiatorDhPublicKey
+            }));
+          }
+        }
+      }
+      
+      // Handle ping/keepalive
+      if (data.type === 'ping') {
+        ws.send(JSON.stringify({ type: 'pong' }));
+      }
+      
+    } catch (error) {
+      console.error('WebSocket message error:', error);
+    }
+  });
+  
+  ws.on('close', () => {
+    // Remove from session's client list
+    if (ws.sessionCode) {
+      const clients = wsConnections.get(ws.sessionCode);
+      if (clients) {
+        clients.delete(ws);
+        if (clients.size === 0) {
+          wsConnections.delete(ws.sessionCode);
+        }
+      }
+      
+      // If a sender disconnects, clear the senderConnected flag
+      if (ws.role === 'sender') {
+        const conn = connManager.getConnection(ws.sessionCode);
+        if (conn) {
+          conn.senderConnected = false;
+          console.log(`WebSocket: Sender disconnected from session ${ws.sessionCode}, session available for new sender`);
+        }
+      } else {
+        console.log(`WebSocket: ${ws.role || 'client'} disconnected from session ${ws.sessionCode}`);
+      }
+    }
+  });
+  
+  ws.on('error', (error) => {
+    console.error('WebSocket error:', error);
   });
 });
 
-process.on('SIGINT', () => {
-  console.log('SIGINT received, shutting down gracefully...');
-  clearInterval(cleanupInterval);
-  connManager.stopCleanupTimer();
-  server.close(() => {
-    console.log('Server closed');
-    process.exit(0);
+// Ping all clients every 30 seconds to keep connections alive
+const wsHeartbeat = setInterval(() => {
+  wss.clients.forEach((ws) => {
+    if (!ws.isAlive) {
+      console.log('WebSocket: Terminating inactive client');
+      return ws.terminate();
+    }
+    ws.isAlive = false;
+    ws.ping();
   });
-});
+}, 30000);
+
+// Graceful shutdown handler
+function gracefulShutdown(signal) {
+  console.log(`${signal} received, shutting down gracefully...`);
+  
+  // Clear all intervals
+  clearInterval(cleanupInterval);
+  clearInterval(wsHeartbeat);
+  connManager.stopCleanupTimer();
+  
+  // Force exit after 5 seconds if graceful shutdown fails
+  const forceExitTimeout = setTimeout(() => {
+    console.log('Forcing exit after timeout...');
+    process.exit(1);
+  }, 5000);
+  
+  // Close all WebSocket connections
+  wss.clients.forEach((client) => {
+    try {
+      client.terminate();
+    } catch (e) {
+      // Ignore errors during cleanup
+    }
+  });
+  
+  // Close WebSocket server
+  wss.close(() => {
+    console.log('WebSocket server closed');
+    
+    // Close HTTP server
+    server.close(() => {
+      console.log('Server closed');
+      clearTimeout(forceExitTimeout);
+      process.exit(0);
+    });
+  });
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 module.exports = app;
