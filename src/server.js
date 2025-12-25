@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const QRCode = require('qrcode');
 const multer = require('multer');
 const WebSocket = require('ws');
+const rateLimit = require('express-rate-limit');
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 const ConnectionManager = require('./connectionManager');
@@ -13,6 +14,10 @@ const EncryptionManager = require('./encryptionManager');
 const { encodeToPgp, decodeFromPgp } = require('./pgpWordlist');
 
 const app = express();
+
+// Trust proxy to correctly identify client IP from X-Forwarded-For header (set by nginx)
+// Required for accurate rate limiting when behind a reverse proxy
+app.set('trust proxy', 1);
 
 // Parse size strings like "100mb", "1gb", etc. into bytes
 function parseSize(sizeStr) {
@@ -50,6 +55,16 @@ const CLEANUP_INTERVAL_MS = parseInt(process.env.CLEANUP_INTERVAL_MS || '300000'
 const FILE_RETENTION_TIME = parseInt(process.env.FILE_RETENTION_TIME || '30') * 60 * 1000; // Convert minutes to milliseconds
 const UPLOAD_DIR = path.join(__dirname, '../public/uploads');
 
+// Rate limiting configuration
+const GLOBAL_RATE_LIMIT_WINDOW_MS = parseInt(process.env.GLOBAL_RATE_LIMIT_WINDOW_MS || '60000');
+const GLOBAL_RATE_LIMIT_MAX = parseInt(process.env.GLOBAL_RATE_LIMIT_MAX || '10000');
+const RATE_LIMIT_WINDOW_MS = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000');
+const RATE_LIMIT_MAX_REQUESTS = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100');
+const SESSION_RATE_LIMIT_WINDOW_MS = parseInt(process.env.SESSION_RATE_LIMIT_WINDOW_MS || '60000');
+const SESSION_RATE_LIMIT_MAX = parseInt(process.env.SESSION_RATE_LIMIT_MAX || '10');
+const UPLOAD_RATE_LIMIT_WINDOW_MS = parseInt(process.env.UPLOAD_RATE_LIMIT_WINDOW_MS || '60000');
+const UPLOAD_RATE_LIMIT_MAX = parseInt(process.env.UPLOAD_RATE_LIMIT_MAX || '5');
+
 // Ensure upload directory exists
 if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -58,10 +73,62 @@ if (!fs.existsSync(UPLOAD_DIR)) {
 // Map to track uploaded files and their creation timestamps
 const uploadedFiles = new Map();
 
+// Map to track active file downloads to prevent race conditions during cleanup
+// Key: filename, Value: number of active downloads
+const activeDownloads = new Map();
+
 // Middleware
 app.use(express.json({ limit: BODY_SIZE_LIMIT }));
 app.use(express.urlencoded({ limit: BODY_SIZE_LIMIT, extended: true }));
 app.use(express.static(path.join(__dirname, '../public')));
+
+// Rate limiting middleware
+// Global rate limiter (DDoS protection - all requests combined)
+const globalDdosLimiter = rateLimit({
+  windowMs: GLOBAL_RATE_LIMIT_WINDOW_MS,
+  max: GLOBAL_RATE_LIMIT_MAX,
+  message: { error: 'Server is under heavy load, please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => 'global'  // All requests share same key
+});
+
+// General rate limiter for all API endpoints
+const generalLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  max: RATE_LIMIT_MAX_REQUESTS,
+  message: { error: 'Too many requests, please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting for static files
+    return !req.path.startsWith('/api/');
+  }
+});
+
+// Stricter rate limiter for session creation (prevent session exhaustion)
+const sessionLimiter = rateLimit({
+  windowMs: SESSION_RATE_LIMIT_WINDOW_MS,
+  max: SESSION_RATE_LIMIT_MAX,
+  message: { error: 'Too many sessions created, please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+// Strictest rate limiter for file uploads
+const uploadLimiter = rateLimit({
+  windowMs: UPLOAD_RATE_LIMIT_WINDOW_MS,
+  max: UPLOAD_RATE_LIMIT_MAX,
+  message: { error: 'Too many uploads, please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+// Apply global DDoS protection first (before per-IP limits)
+app.use(globalDdosLimiter);
+
+// Apply general rate limiting to all API routes
+app.use('/api/', generalLimiter);
 
 // Multer for file uploads - use disk storage to support large files
 const storage = multer.diskStorage({
@@ -121,12 +188,9 @@ function notifySessionRole(code, role, message) {
   }
 }
 
-// ============ FILE CLEANUP FUNCTIONALITY ============
 
-/**
- * Clean up expired uploaded files
- * Scans the actual filesystem to catch files from previous server sessions
- */
+// * Clean up expired uploaded files
+
 function cleanupExpiredFiles() {
   const now = Date.now();
   let deletedCount = 0;
@@ -145,10 +209,16 @@ function cleanupExpiredFiles() {
         
         // If file is older than retention time, delete it
         if (fileAge > FILE_RETENTION_TIME) {
-          fs.unlinkSync(filepath);
-          uploadedFiles.delete(filename); // Also remove from map if present
-          console.log(`✓ Deleted expired file: ${filename} (age: ${Math.round(fileAge / 1000 / 60)} min)`);
-          deletedCount++;
+          // Check if file has active downloads - skip if so
+          const downloadCount = activeDownloads.get(filename) || 0;
+          if (downloadCount > 0) {
+            console.log(`⏳ Skipping deletion of ${filename} - ${downloadCount} active download(s)`);
+          } else {
+            fs.unlinkSync(filepath);
+            uploadedFiles.delete(filename); // Also remove from map if present
+            console.log(`✓ Deleted expired file: ${filename} (age: ${Math.round(fileAge / 1000 / 60)} min)`);
+            deletedCount++;
+          }
         }
       } catch (err) {
         if (err.code !== 'ENOENT') {
@@ -188,18 +258,12 @@ app.get('/sender', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/sender.html'));
 });
 
-/**
- * Alternative receiver page - receiver inputs code from sender's display
- */
-app.get('/receiver', (req, res) => {
-  res.sendFile(path.join(__dirname, '../public/receiver.html'));
-});
 
 /**
  * API: Create a new receiver session (receiver initiates)
  * Now accepts the receiver's DH public key from the browser
  */
-app.post('/api/session/create', async (req, res) => {
+app.post('/api/session/create', sessionLimiter, async (req, res) => {
   try {
     const { initiatorDhPublicKey } = req.body;
     
@@ -207,6 +271,10 @@ app.post('/api/session/create', async (req, res) => {
       mode: 'receiver',
       initiatorDhPublicKey: initiatorDhPublicKey || null
     });
+
+    // Get the receiver token for WebSocket authentication
+    const conn = connManager.getConnection(code);
+    const wsToken = conn.receiverToken;
 
     // Generate QR code URL
     const qrUrl = `${BASE_URL}/join?code=${code}`;
@@ -220,7 +288,8 @@ app.post('/api/session/create', async (req, res) => {
       code,
       pgpCode,
       qrCode,
-      baseUrl: BASE_URL
+      baseUrl: BASE_URL,
+      wsToken  // Token for WebSocket authentication
     });
   } catch (error) {
     console.error('Error creating session:', error);
@@ -257,6 +326,9 @@ app.post('/api/session/join', (req, res) => {
     // Mark that a sender is now connected
     conn.senderConnected = true;
 
+    // Generate sender token for WebSocket authentication
+    const wsToken = connManager.generateSenderToken(code);
+
     // Store sender's DH public key if provided
     if (responderDhPublicKey) {
       connManager.setResponderPublicKey(code, responderDhPublicKey);
@@ -272,7 +344,8 @@ app.post('/api/session/join', (req, res) => {
       success: true,
       initiatorPublicKey: conn.initiatorDhPublicKey,
       responderPublicKey: conn.responderDhPublicKey,
-      code
+      code,
+      wsToken  // Token for WebSocket authentication
     });
   } catch (error) {
     console.error('Error joining session:', error);
@@ -341,7 +414,7 @@ app.post('/api/dh/exchange', (req, res) => {
   }
 });
 
-app.post('/api/message/send', upload.array('files'), (req, res) => {
+app.post('/api/message/send', uploadLimiter, upload.array('files'), (req, res) => {
   try {
     let { code, messageType, ciphertext, iv, authTag, hash, text } = req.body;
     console.log('[SERVER /api/message/send] messageType:', messageType);
@@ -498,11 +571,13 @@ app.get('/api/message/retrieve/:code', (req, res) => {
  */
 app.get('/api/file/download/:filename', (req, res) => {
   try {
-    const filename = req.params.filename;
-    const filepath = path.join(UPLOAD_DIR, filename);
+    // Sanitize filename to prevent directory traversal
+    const filename = path.basename(req.params.filename);
+    const filepath = path.resolve(UPLOAD_DIR, filename);
+    const uploadDirResolved = path.resolve(UPLOAD_DIR);
 
-    // Security: prevent directory traversal
-    if (!filepath.startsWith(UPLOAD_DIR)) {
+    // Security: prevent directory traversal with proper path comparison
+    if (!filepath.startsWith(uploadDirResolved + path.sep)) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -510,15 +585,44 @@ app.get('/api/file/download/:filename', (req, res) => {
       return res.status(404).json({ error: 'File not found' });
     }
 
+    // Track active download to prevent cleanup race condition
+    const currentCount = activeDownloads.get(filename) || 0;
+    activeDownloads.set(filename, currentCount + 1);
+
+    // Helper to decrement download count
+    const decrementDownload = () => {
+      const count = activeDownloads.get(filename) || 1;
+      if (count <= 1) {
+        activeDownloads.delete(filename);
+      } else {
+        activeDownloads.set(filename, count - 1);
+      }
+    };
+
     // Stream file as binary instead of loading entire file into memory
     res.setHeader('Content-Type', 'application/octet-stream');
     const stream = fs.createReadStream(filepath);
+    
     stream.on('error', (error) => {
       console.error('Stream error:', error);
+      decrementDownload();
       if (!res.headersSent) {
         res.status(500).json({ error: 'Failed to download file' });
       }
     });
+    
+    stream.on('end', () => {
+      decrementDownload();
+    });
+    
+    // Also handle client disconnect
+    res.on('close', () => {
+      if (!res.writableEnded) {
+        decrementDownload();
+        stream.destroy();
+      }
+    });
+    
     stream.pipe(res);
   } catch (error) {
     console.error('Error downloading file:', error);
@@ -630,9 +734,16 @@ wss.on('connection', (ws) => {
       
       // Handle subscription to a session
       if (data.type === 'subscribe') {
-        const { code, role } = data;
+        const { code, role, token } = data;
         if (!code) {
           ws.send(JSON.stringify({ type: 'error', message: 'No session code provided' }));
+          return;
+        }
+
+        // Validate the authentication token
+        if (!token || !connManager.validateToken(code, role, token)) {
+          ws.send(JSON.stringify({ type: 'error', message: 'Invalid or missing authentication token' }));
+          console.log(`WebSocket: Rejected unauthorized ${role || 'unknown'} subscription to session ${code}`);
           return;
         }
         

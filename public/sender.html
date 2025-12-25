@@ -27,11 +27,14 @@
     </div>
 
     <div id="messageSection" class="message-section" style="display: none;">
-      <div class="section-title">Transmit Data securely <span id="maxSizeInfo" style="font-size: 12px; color: #64748b; font-weight: 400;"></span></div>
+      <div class="section-title">
+        <span id="maxSizeInfo">
+        </span>
+      </div>
 
       <div>
         <label class="section-title">Text Message</label>
-        <textarea id="textInput" class="text-input" placeholder="Enter your message (or skip to upload files)"></textarea>
+        <textarea id="textInput" class="text-input" placeholder="Enter your message (or skip if you only want to upload files)"></textarea>
       </div>
 
       <div>
@@ -43,7 +46,6 @@
           </label>
         </div>
         <div id="filesList" class="files-list"></div>
-        <button class="btn btn-secondary" onclick="clearFiles()" style="margin-top: 10px;">🗑️ Clear Files</button>
       </div>
 
       <button class="btn send-button" onclick="sendMessage()" id="sendBtn">
@@ -55,10 +57,6 @@
       <div id="keyHashDisplay" class="key-hash-display" style="display: none;"></div>
 
       <div id="messagesList" class="messages-list" style="margin-top: 30px;"></div>
-    </div>
-
-    <div class="mode-toggle">
-      <a href="/" class="mode-link">↔️ Switch to Alternative Mode (Display QR code for scanner)</a>
     </div>
   </div>
 

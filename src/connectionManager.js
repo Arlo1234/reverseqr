@@ -31,10 +31,14 @@ class ConnectionManager {
    */
   createConnection(options = {}) {
     const code = this.generateConnectionCode();
+    // Generate secure tokens for WebSocket authentication
+    const receiverToken = crypto.randomBytes(16).toString('hex');
     this.connections.set(code, {
       mode: options.mode || 'receiver', // 'receiver' or 'sender'
       initiatorDhPublicKey: options.initiatorDhPublicKey || null,
       responderDhPublicKey: null,
+      receiverToken,  // Token for receiver WebSocket auth
+      senderToken: null,  // Token for sender WebSocket auth (set on join)
       messages: [],
       createdAt: Date.now(),
       expiresAt: Date.now() + this.sessionTimeout,
@@ -69,6 +73,37 @@ class ConnectionManager {
     if (!conn) throw new Error('Connection not found');
     conn.responderDhPublicKey = responderDhPublicKey;
     conn.status = 'established';
+  }
+
+  /**
+   * Generate and set sender token when sender joins
+   * @param {string} code - Connection code
+   * @returns {string} The generated sender token
+   */
+  generateSenderToken(code) {
+    const conn = this.getConnection(code);
+    if (!conn) throw new Error('Connection not found');
+    conn.senderToken = crypto.randomBytes(16).toString('hex');
+    return conn.senderToken;
+  }
+
+  /**
+   * Validate WebSocket authentication token
+   * @param {string} code - Connection code
+   * @param {string} role - 'receiver' or 'sender'
+   * @param {string} token - Authentication token
+   * @returns {boolean} Whether the token is valid
+   */
+  validateToken(code, role, token) {
+    const conn = this.getConnection(code);
+    if (!conn || !token) return false;
+    
+    if (role === 'receiver') {
+      return conn.receiverToken === token;
+    } else if (role === 'sender') {
+      return conn.senderToken === token;
+    }
+    return false;
   }
 
   /**

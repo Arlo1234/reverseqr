@@ -340,28 +340,6 @@ h1 {
   background: var(--primary-dark);
 }
 
-/* Mode Toggle */
-.mode-toggle {
-  text-align: center;
-  margin-top: 32px;
-  padding-top: 32px;
-  border-top: 1px solid var(--border-color);
-}
-
-.mode-link {
-  color: var(--primary);
-  text-decoration: none;
-  font-size: 13px;
-  cursor: pointer;
-  font-weight: 600;
-  transition: all 0.2s ease;
-}
-
-.mode-link:hover {
-  color: var(--primary-dark);
-  text-decoration: underline;
-}
-
 /* Responsive */
 @media (max-width: 640px) {
   .container {

@@ -4,6 +4,7 @@ let connectionCode = null;
 let encryptionKey = null;
 let connectedReceiver = false;
 let ws = null;  // WebSocket connection
+let wsToken = null;  // WebSocket authentication token
 let dhKeyPairPending = null;  // Store DH key pair while waiting for receiver's key
 let receiverKeyResolver = null;  // Resolver for waiting on receiver's key
 let maxFileSize = 5 * 1024 * 1024 * 1024; // Default 5GB, will be updated from server
@@ -16,7 +17,7 @@ async function displayMaxFileSize() {
     maxFileSize = config.maxFileSize; // Store for validation
     const maxSizeElement = document.getElementById('maxSizeInfo');
     if (maxSizeElement && config.maxFileSizeFormatted) {
-      maxSizeElement.textContent = `(Max: ${config.maxFileSizeFormatted})`;
+      maxSizeElement.textContent = `(Maximum message size: ${config.maxFileSizeFormatted})`;
     }
   } catch (error) {
     console.error('Error fetching max file size:', error);
@@ -497,6 +498,9 @@ async function computeSharedSecret(privateKey, otherPublicKey) {
 }
 
 // Derive encryption key from shared secret using HKDF
+// Per RFC 5869 Section 3.1: when IKM (ECDH shared secret) is already 
+// uniformly random, a zero salt is acceptable as HKDF will use a 
+// hash-length string of zeros, which still provides proper extraction.
 async function deriveKeyFromSharedSecret(sharedSecret) {
   const keyMaterial = await crypto.subtle.importKey(
     'raw',
@@ -510,7 +514,7 @@ async function deriveKeyFromSharedSecret(sharedSecret) {
     {
       name: 'HKDF',
       hash: 'SHA-256',
-      salt: new Uint8Array(32),  // Zero salt
+      salt: new Uint8Array(32),  // Zero salt - acceptable per RFC 5869 for uniformly random IKM
       info: new TextEncoder().encode('ReverseQR-Encryption-Key')
     },
     keyMaterial,
@@ -529,12 +533,13 @@ function setupWebSocket() {
   
   ws.onopen = () => {
     console.log('WebSocket connected');
-    // Subscribe to session as sender
-    if (connectionCode) {
+    // Subscribe to session as sender with auth token
+    if (connectionCode && wsToken) {
       ws.send(JSON.stringify({
         type: 'subscribe',
         code: connectionCode,
-        role: 'sender'
+        role: 'sender',
+        token: wsToken
       }));
     }
   };
@@ -589,11 +594,12 @@ async function waitForReceiverPublicKey(code, dhKeyPair) {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       setupWebSocket();
     } else {
-      // Already connected, just subscribe
+      // Already connected, just subscribe with auth token
       ws.send(JSON.stringify({
         type: 'subscribe',
         code: code,
-        role: 'sender'
+        role: 'sender',
+        token: wsToken
       }));
     }
 
@@ -695,6 +701,7 @@ async function connectToReceiver() {
 
     const data = await response.json();
     connectionCode = data.code;
+    wsToken = data.wsToken;  // Store WebSocket auth token
 
     // If receiver's public key is not immediately available, wait via WebSocket
     if (!data.initiatorPublicKey) {
@@ -706,6 +713,11 @@ async function connectToReceiver() {
     } else {
       // Receiver is already connected, establish key immediately
       await completeKeyExchange(dhKeyPair, data.initiatorPublicKey);
+    }
+
+    // Verify key exchange completed successfully before marking as connected
+    if (!encryptionKey) {
+      throw new Error('Key exchange failed - encryption key not established');
     }
 
     connectedReceiver = true;
@@ -756,6 +768,12 @@ async function sendMessage() {
   try {
     if (!connectedReceiver) {
       showError('Not connected to receiver');
+      return;
+    }
+
+    // Verify key exchange was completed successfully
+    if (!encryptionKey) {
+      showError('Secure connection not established. Key exchange may have failed. Please reconnect.');
       return;
     }
 
@@ -984,11 +1002,6 @@ function displaySentMessages() {
     
     messagesList.appendChild(msgDiv);
   });
-}
-
-function clearFiles() {
-  selectedFiles = [];
-  renderFilesList();
 }
 
 function stringToHex(str) {

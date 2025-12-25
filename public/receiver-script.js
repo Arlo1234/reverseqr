@@ -2,6 +2,7 @@ let connectionCode = null;
     let encryptionKey = null;
     let dhKeyPair = null;  // Our DH key pair
     let ws = null;  // WebSocket connection
+    let wsToken = null;  // WebSocket authentication token
 
     // Set up WebSocket connection
     function setupWebSocket() {
@@ -12,12 +13,13 @@ let connectionCode = null;
       
       ws.onopen = () => {
         console.log('WebSocket connected');
-        // Subscribe to session as receiver
-        if (connectionCode) {
+        // Subscribe to session as receiver with auth token
+        if (connectionCode && wsToken) {
           ws.send(JSON.stringify({
             type: 'subscribe',
             code: connectionCode,
-            role: 'receiver'
+            role: 'receiver',
+            token: wsToken
           }));
         }
       };
@@ -90,6 +92,12 @@ let connectionCode = null;
 
     // Fetch and display messages (called when WebSocket notifies us)
     async function fetchAndDisplayMessages() {
+      // Verify key exchange was completed before fetching messages
+      if (!encryptionKey) {
+        console.warn('Cannot fetch messages: encryption key not established yet');
+        return;
+      }
+
       try {
         const response = await fetch(`/api/message/retrieve/${connectionCode}`);
         const data = await response.json();
@@ -173,6 +181,7 @@ let connectionCode = null;
         const data = await response.json();
 
         connectionCode = data.code;
+        wsToken = data.wsToken;  // Store WebSocket auth token
         document.getElementById('pgpCode').textContent = data.pgpCode;
 
         // Display QR URL in plain text
@@ -192,6 +201,9 @@ let connectionCode = null;
     }
 
     // Derive encryption key from shared secret using HKDF
+    // Per RFC 5869 Section 3.1: when IKM (ECDH shared secret) is already 
+    // uniformly random, a zero salt is acceptable as HKDF will use a 
+    // hash-length string of zeros, which still provides proper extraction.
     async function deriveKeyFromSharedSecret(sharedSecret) {
       const keyMaterial = await crypto.subtle.importKey(
         'raw',
@@ -205,7 +217,7 @@ let connectionCode = null;
         {
           name: 'HKDF',
           hash: 'SHA-256',
-          salt: new Uint8Array(32),  // Zero salt
+          salt: new Uint8Array(32),  // Zero salt - acceptable per RFC 5869 for uniformly random IKM
           info: new TextEncoder().encode('ReverseQR-Encryption-Key')
         },
         keyMaterial,
