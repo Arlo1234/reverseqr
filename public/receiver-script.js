@@ -533,7 +533,15 @@ let connectionCode = null;
     });
 
     // Initialize on page load
-    window.addEventListener('DOMContentLoaded', initializeReceiver);
+    window.addEventListener('DOMContentLoaded', () => {
+      initializeReceiver();
+      
+      // Set up copy code button event listener
+      const copyCodeBtn = document.getElementById('copyCodeBtn');
+      if (copyCodeBtn) {
+        copyCodeBtn.addEventListener('click', copyCode);
+      }
+    });
 
     async function hashBuffer(buffer) {
       const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);

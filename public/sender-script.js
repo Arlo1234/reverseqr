@@ -377,6 +377,35 @@ if (scannedCode) {
   }, 500);
 }
 
+// Set up event listeners when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+  // Connect button
+  const connectBtn = document.getElementById('connectBtn');
+  if (connectBtn) {
+    connectBtn.addEventListener('click', connectToReceiver);
+  }
+  
+  // Send button
+  const sendBtn = document.getElementById('sendBtn');
+  if (sendBtn) {
+    sendBtn.addEventListener('click', sendMessage);
+  }
+  
+  // File upload area - click to open file picker
+  const fileUploadArea = document.getElementById('fileUploadArea');
+  if (fileUploadArea) {
+    fileUploadArea.addEventListener('click', () => {
+      document.getElementById('fileInput').click();
+    });
+  }
+  
+  // File input change handler
+  const fileInput = document.getElementById('fileInput');
+  if (fileInput) {
+    fileInput.addEventListener('change', handleFileSelect);
+  }
+});
+
 // Drag and drop support
 document.addEventListener('dragover', (e) => {
   e.preventDefault();

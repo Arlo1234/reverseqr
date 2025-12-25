@@ -77,6 +77,20 @@ const uploadedFiles = new Map();
 // Key: filename, Value: number of active downloads
 const activeDownloads = new Map();
 
+// Logging utility
+function logEvent(ip, action, details = '') {
+  const timestamp = new Date().toLocaleTimeString('en-US', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  });
+  console.log(`[${timestamp}] ${ip.padEnd(15)} | ${action.padEnd(20)} ${details}`);
+}
+
 // Middleware
 app.use(express.json({ limit: BODY_SIZE_LIMIT }));
 app.use(express.urlencoded({ limit: BODY_SIZE_LIMIT, extended: true }));
@@ -266,6 +280,7 @@ app.get('/sender', (req, res) => {
 app.post('/api/session/create', sessionLimiter, async (req, res) => {
   try {
     const { initiatorDhPublicKey } = req.body;
+    const clientIp = req.ip;
     
     const code = connManager.createConnection({
       mode: 'receiver',
@@ -275,6 +290,9 @@ app.post('/api/session/create', sessionLimiter, async (req, res) => {
     // Get the receiver token for WebSocket authentication
     const conn = connManager.getConnection(code);
     const wsToken = conn.receiverToken;
+
+    // Log the event
+    logEvent(clientIp, 'created session', `(${code})`);
 
     // Generate QR code URL
     const qrUrl = `${BASE_URL}/join?code=${code}`;
@@ -305,6 +323,7 @@ app.post('/api/session/create', sessionLimiter, async (req, res) => {
 app.post('/api/session/join', (req, res) => {
   try {
     let { code, responderDhPublicKey } = req.body;
+    const clientIp = req.ip;
 
     if (!code) {
       return res.status(400).json({ error: 'Code is required' });
@@ -328,6 +347,9 @@ app.post('/api/session/join', (req, res) => {
 
     // Generate sender token for WebSocket authentication
     const wsToken = connManager.generateSenderToken(code);
+
+    // Log the event
+    logEvent(clientIp, 'joined session', `(${code})`);
 
     // Store sender's DH public key if provided
     if (responderDhPublicKey) {
@@ -381,45 +403,10 @@ app.get('/api/session/status/:code', (req, res) => {
   }
 });
 
-/**
- * API: Exchange DH keys and get shared secret (legacy - no longer needed with browser-side DH)
- */
-app.post('/api/dh/exchange', (req, res) => {
-  try {
-    const { code, publicKey } = req.body;
-
-    if (!code || !publicKey) {
-      return res.status(400).json({ error: 'Code and publicKey are required' });
-    }
-
-    const dh = dhInstances.get(code);
-    if (!dh) {
-      return res.status(404).json({ error: 'DH instance not found' });
-    }
-
-    // Compute shared secret
-    const sharedSecret = dh.computeSharedSecret(publicKey);
-    const encryptionKey = deriveEncryptionKey(sharedSecret);
-
-    res.json({
-      success: true,
-      sharedSecretHash: require('crypto')
-        .createHash('sha256')
-        .update(sharedSecret)
-        .digest('hex')
-    });
-  } catch (error) {
-    console.error('Error in DH exchange:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
 app.post('/api/message/send', uploadLimiter, upload.array('files'), (req, res) => {
   try {
     let { code, messageType, ciphertext, iv, authTag, hash, text } = req.body;
-    console.log('[SERVER /api/message/send] messageType:', messageType);
-    console.log('[SERVER] Files received:', req.files ? req.files.length : 0);
-    console.log('[SERVER] Body keys:', Object.keys(req.body));
+    const clientIp = req.ip;
     
     // Handle file IVs and hashes from FormData
     // Note: form-data parser converts 'fileIvs[]' to 'fileIvs' when parsing multipart
@@ -524,6 +511,25 @@ app.post('/api/message/send', uploadLimiter, upload.array('files'), (req, res) =
     // Store the message
     connManager.storeMessage(code, messageData);
     
+    // Calculate total size for logging
+    // For text messages: ciphertext is hex-encoded (each 2 chars = 1 byte)
+    // For files: req.files contains actual file sizes
+    let totalSize = 0;
+    if (messageType === 'text' && ciphertext) {
+      // Hex string: 2 chars per byte
+      totalSize += Math.ceil(ciphertext.length / 2);
+    }
+    if (messageType === 'files' && req.files) {
+      req.files.forEach(file => {
+        totalSize += file.size;
+      });
+    }
+    
+    // Log the event with formatted file size
+    const action = messageType === 'files' ? 'sent file(s)' : 'sent message';
+    const details = messageType === 'files' ? `(${req.files.length} files) size: ${formatBytes(totalSize)}` : `size: ${formatBytes(totalSize)}`;
+    logEvent(clientIp, action, details);
+    
     // Notify receiver via WebSocket that a new message is available
     notifySessionRole(code, 'receiver', {
       type: 'message-available',
@@ -575,6 +581,7 @@ app.get('/api/file/download/:filename', (req, res) => {
     const filename = path.basename(req.params.filename);
     const filepath = path.resolve(UPLOAD_DIR, filename);
     const uploadDirResolved = path.resolve(UPLOAD_DIR);
+    const clientIp = req.ip;
 
     // Security: prevent directory traversal with proper path comparison
     if (!filepath.startsWith(uploadDirResolved + path.sep)) {
@@ -584,6 +591,9 @@ app.get('/api/file/download/:filename', (req, res) => {
     if (!fs.existsSync(filepath)) {
       return res.status(404).json({ error: 'File not found' });
     }
+
+    // Log the event
+    logEvent(clientIp, 'downloaded file', filename);
 
     // Track active download to prevent cleanup race condition
     const currentCount = activeDownloads.get(filename) || 0;
@@ -708,7 +718,6 @@ const server = app.listen(PORT, () => {
   console.log(`🚀 ReverseQR server running at ${BASE_URL}`);
   console.log(`📊 Receiver: ${BASE_URL}/`);
   console.log(`📤 Sender: ${BASE_URL}/sender`);
-  console.log(`🔄 Alternative Receiver: ${BASE_URL}/receiver`);
   console.log(`\n⚙️  Configuration:`);
   console.log(`   • Max file size: ${formatBytes(MAX_FILE_SIZE_BYTES)}`);
   console.log(`   • Body size limit: ${BODY_SIZE_LIMIT}`);

@@ -26,7 +26,6 @@ The ReverseQR secure file and text sharing application has been successfully bui
 ### ✅ Complete Frontend System
 - **Receiver Page** (`/`) - QR code display + message polling
 - **Sender Page** (`/sender`) - Code entry + message/file sending
-- **Alternative Mode** (`/receiver`) - Manual code entry
 - **Responsive Design** - Works on desktop and mobile
 
 ### ✅ All Features Implemented

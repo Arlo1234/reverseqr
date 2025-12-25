@@ -19,7 +19,7 @@
       <div class="section-title">Step 1: Connect</div>
       <div class="input-group">
         <input type="text" id="codeInput" placeholder="Enter connection code or paste PGP words" />
-        <button class="btn" onclick="connectToReceiver()">🔗 Connect</button>
+        <button class="btn" id="connectBtn">🔗 Connect</button>
       </div>
       <div id="connectionStatus" class="connection-status" style="display: none;">
         <span>Establishing secure connection...</span>
@@ -39,8 +39,8 @@
 
       <div>
         <label class="section-title">Upload Files </label>
-        <div class="file-upload" onclick="document.getElementById('fileInput').click();">
-          <input type="file" id="fileInput" multiple onchange="handleFileSelect(event)" />
+        <div class="file-upload" id="fileUploadArea">
+          <input type="file" id="fileInput" multiple />
           <label class="file-upload-label">
             Click to browse or drag & drop files here
           </label>
@@ -48,7 +48,7 @@
         <div id="filesList" class="files-list"></div>
       </div>
 
-      <button class="btn send-button" onclick="sendMessage()" id="sendBtn">
+      <button class="btn send-button" id="sendBtn">
         ✈️ Send Securely
       </button>
     </br>
