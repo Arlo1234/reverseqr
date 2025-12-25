@@ -340,10 +340,40 @@ h1 {
   background: var(--primary-dark);
 }
 
+/* Footer */
+.footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 16px;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.95);
+  border-top: 1px solid var(--border-color);
+  font-size: 14px;
+}
+
+.footer a {
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.footer a:hover {
+  color: var(--primary);
+  text-decoration: underline;
+}
+
+.footer .separator {
+  margin: 0 12px;
+  color: var(--border-color);
+}
+
 /* Responsive */
 @media (max-width: 640px) {
   .container {
     padding: 24px;
+    padding-bottom: 80px; /* Space for footer */
   }
 
   h1 {
@@ -356,5 +386,14 @@ h1 {
 
   .key-words {
     font-size: 16px;
+  }
+
+  .footer {
+    font-size: 12px;
+    padding: 12px;
+  }
+
+  .footer .separator {
+    margin: 0 8px;
   }
 }
