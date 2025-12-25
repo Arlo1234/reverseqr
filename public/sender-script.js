@@ -689,6 +689,8 @@ async function completeKeyExchange(dhKeyPair, receiverPublicKeyHex) {
 async function connectToReceiver() {
   try {
     showError('');
+    const connectBtn = document.getElementById('connectBtn');
+    
     let code = document.getElementById('codeInput').value.trim();
     if (!code) {
       showError('Please enter a connection code');
@@ -701,6 +703,12 @@ async function connectToReceiver() {
     } catch (e) {
       showError(e.message);
       return;
+    }
+
+    // Disable connect button to prevent double attempts
+    if (connectBtn) {
+      connectBtn.disabled = true;
+      connectBtn.textContent = '⏳ Connecting...';
     }
 
     const status = document.getElementById('connectionStatus');
@@ -760,6 +768,12 @@ async function connectToReceiver() {
   } catch (error) {
     showError('Connection failed: ' + error.message);
     console.error(error);
+    // Re-enable connect button on error
+    const connectBtn = document.getElementById('connectBtn');
+    if (connectBtn) {
+      connectBtn.disabled = false;
+      connectBtn.textContent = '🔗 Connect';
+    }
   }
 }
 
