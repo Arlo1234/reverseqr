@@ -662,10 +662,12 @@ app.get('/health', (req, res) => {
  * API: Get server configuration
  */
 app.get('/api/config', (req, res) => {
+  const bodyLimitBytes = parseSize(BODY_SIZE_LIMIT);
   res.json({
     maxFileSize: MAX_FILE_SIZE_BYTES,
     maxFileSizeFormatted: formatBytes(MAX_FILE_SIZE_BYTES),
     bodyLimit: BODY_SIZE_LIMIT,
+    bodyLimitFormatted: formatBytes(bodyLimitBytes),
     sessionTimeout: SESSION_TIMEOUT_MS,
     fileRetention: FILE_RETENTION_TIME
   });
@@ -720,11 +722,10 @@ const server = app.listen(PORT, () => {
   console.log(`📤 Sender: ${BASE_URL}/sender`);
   console.log(`\n⚙️  Configuration:`);
   console.log(`   • Max file size: ${formatBytes(MAX_FILE_SIZE_BYTES)}`);
-  console.log(`   • Body size limit: ${BODY_SIZE_LIMIT}`);
+  console.log(`   • Body size limit: ${formatBytes(parseSize(BODY_SIZE_LIMIT))}`);
   console.log(`   • Session timeout: ${SESSION_TIMEOUT_MS / 1000 / 60} minutes`);
   console.log(`   • File retention: ${FILE_RETENTION_TIME / 1000 / 60} minutes`);
   console.log(`   • Cleanup interval: ${CLEANUP_INTERVAL_MS / 1000 / 60} minutes`);
-  console.log(`   • WebSocket: enabled\n`);
 });
 
 // ============ WEBSOCKET SERVER ============
@@ -732,8 +733,6 @@ const server = app.listen(PORT, () => {
 const wss = new WebSocket.Server({ server });
 
 wss.on('connection', (ws) => {
-  console.log('WebSocket: New client connected');
-  
   ws.isAlive = true;
   ws.on('pong', () => { ws.isAlive = true; });
   
@@ -766,7 +765,6 @@ wss.on('connection', (ws) => {
         }
         wsConnections.get(code).add(ws);
         
-        console.log(`WebSocket: ${ws.role} subscribed to session ${code}`);
         ws.send(JSON.stringify({ type: 'subscribed', code, role: ws.role }));
         
         // Check if there's already data to send
@@ -784,6 +782,18 @@ wss.on('connection', (ws) => {
             ws.send(JSON.stringify({
               type: 'receiver-key-available',
               initiatorPublicKey: session.initiatorDhPublicKey
+            }));
+          }
+        }
+        
+        // If receiver subscribes, check for any queued messages
+        if (ws.role === 'receiver') {
+          const messages = connManager.getMessages(code);
+          if (messages && messages.length > 0) {
+            // Notify receiver that messages are available
+            ws.send(JSON.stringify({
+              type: 'message-available',
+              messageCount: messages.length
             }));
           }
         }
@@ -815,10 +825,9 @@ wss.on('connection', (ws) => {
         const conn = connManager.getConnection(ws.sessionCode);
         if (conn) {
           conn.senderConnected = false;
-          console.log(`WebSocket: Sender disconnected from session ${ws.sessionCode}, session available for new sender`);
         }
       } else {
-        console.log(`WebSocket: ${ws.role || 'client'} disconnected from session ${ws.sessionCode}`);
+        // Client disconnected
       }
     }
   });

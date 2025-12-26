@@ -18,17 +18,10 @@
       <div style="margin-bottom: 30px; border-left: 3px solid var(--accent, #6366f1); padding-left: 20px;">
         <h3 style="margin: 0 0 10px; color: var(--text-primary);">What even is this?</h3>
         <p style="margin: 0; color: var(--text-secondary);">
-          ReverseQR is a secure, end-to-end encrypted file and message sharing service. It allows you to securely share files and text with others without creating accounts or storing data on our servers long-term.
+          ReverseQR is a secure, end-to-end encrypted file and message sharing service. It allows you to securely share files and text with others without creating accounts or storing data on cloud platforms.
         </p>
       </div>
 
-      <div style="margin-bottom: 30px; border-left: 3px solid var(--accent, #6366f1); padding-left: 20px;">
-        <h3 style="margin: 0 0 10px; color: var(--text-primary);">How does the encryption work?</h3>
-        <p style="margin: 0; color: var(--text-secondary);">
-          ReverseQR uses ECDH (Elliptic Curve Diffie-Hellman) for secure key exchange and AES-256-GCM for encrypting your messages and files. Your encryption keys never leave your browser—the server cannot decrypt your content.
-          However, a mailicious server operator could send a different webpage that do not encrypt the data, so only trust this service as much as its host.
-        </p>
-      </div>
 
       <div style="margin-bottom: 30px; border-left: 3px solid var(--accent, #6366f1); padding-left: 20px;">
         <h3 style="margin: 0 0 10px; color: var(--text-primary);">Is my data really private?</h3>
@@ -40,33 +33,17 @@
       <h2 style="margin-top: 40px; margin-bottom: 25px; color: var(--text-primary);">Getting Started</h2>
 
       <div style="margin-bottom: 30px; border-left: 3px solid var(--accent, #6366f1); padding-left: 20px;">
-        <h3 style="margin: 0 0 10px; color: var(--text-primary);">How do I send a file?</h3>
+        <h3 style="margin: 0 0 10px; color: var(--text-primary);">How do I send a file? (step by step guide)</h3>
         <p style="margin: 0; color: var(--text-secondary);">
           1. Click "Send" on the home page<br>
-          2. You'll receive a 9-character code and a QR code<br>
-          3. Share the code or QR code with your recipient<br>
-          4. Once they connect, select files to send<br>
-          5. Files are encrypted and sent over the secure connection
+          2. You'll receive a 3-word code and a QR code<br>
+          3. Share the words with your recipient or have them scan the QR code<br>
+          4. (If using the 3 word code) The recipient opens the /receiver page and enters the words to connect<br>
+          5. Both parties verify the Security Fingerprint matches (if it does not, there is probably a man-in-the-middle attack) going on: DO NOT SEND ANYTHING EVEN REMOTELY PRIVATE!<br>
+          6. Once he connects, he select files to send or text<br>
         </p>
       </div>
 
-      <div style="margin-bottom: 30px; border-left: 3px solid var(--accent, #6366f1); padding-left: 20px;">
-        <h3 style="margin: 0 0 10px; color: var(--text-primary);">How do I receive files?</h3>
-        <p style="margin: 0; color: var(--text-secondary);">
-          1. Click "Receive" on the home page<br>
-          2. Enter the 9-character code you received from the sender<br>
-          3. Verify the Security Fingerprint matches what the sender sees<br>
-          4. Wait for the sender to share files<br>
-          5. Click download to receive the encrypted files
-        </p>
-      </div>
-
-      <div style="margin-bottom: 30px; border-left: 3px solid var(--accent, #6366f1); padding-left: 20px;">
-        <h3 style="margin: 0 0 10px; color: var(--text-primary);">What's the Security Fingerprint?</h3>
-        <p style="margin: 0; color: var(--text-secondary);">
-          The Security Fingerprint is a 3-word combination that both sender and receiver see after connecting. You should verify these words match through a separate communication channel (call, text, in-person) to confirm you're connected to the right person and not being intercepted.
-        </p>
-      </div>
 
       <h2 style="margin-top: 40px; margin-bottom: 25px; color: var(--text-primary);">Sessions & Data</h2>
 
@@ -80,46 +57,40 @@
       <div style="margin-bottom: 30px; border-left: 3px solid var(--accent, #6366f1); padding-left: 20px;">
         <h3 style="margin: 0 0 10px; color: var(--text-primary);">How long are files stored?</h3>
         <p style="margin: 0; color: var(--text-secondary);">
-          Files are automatically deleted after <span id="fileRetention">30</span> minutes, regardless of whether they were downloaded. This ensures your shared data doesn't persist on our servers.
+          Files are automatically deleted after <span id="fileRetention">30</span> minutes, regardless of whether they were downloaded or not. This ensures your shared data doesn't persist on our servers.
         </p>
       </div>
 
       <div style="margin-bottom: 30px; border-left: 3px solid var(--accent, #6366f1); padding-left: 20px;">
-        <h3 style="margin: 0 0 10px; color: var(--text-primary);">What happens if the recipient doesn't connect in time?</h3>
+        <h3 style="margin: 0 0 10px; color: var(--text-primary);">But my connection is slow and I need more than 30 minutes to download the files.</h3>
         <p style="margin: 0; color: var(--text-secondary);">
-          If the recipient doesn't join the session before it expires, the shared files and messages will be deleted. The sender will need to create a new session and share a new code.
+          Don't worry, we didn't said the whole truth in the question above. If a file is currently being downloaded, the server will keep it available until the download is complete, even if that goes beyond the standard retention period.
+        </p>
+      </div>
+<!--TODO-->
+      <div style="margin-bottom: 30px; border-left: 3px solid var(--accent, #6366f1); padding-left: 20px;">
+        <h3 style="margin: 0 0 10px; color: var(--text-primary);">What happens if the recipient goes offline?</h3>
+        <p style="margin: 0; color: var(--text-secondary);">
+          If the recipient reconnects to the session before it expires, the shared files and messages will have persisted on the server and will be available for download, Else, the receiver will need to create a new session and share a new code.
         </p>
       </div>
 
       <h2 style="margin-top: 40px; margin-bottom: 25px; color: var(--text-primary);">Technical Questions</h2>
-
-      <div style="margin-bottom: 30px; border-left: 3px solid var(--accent, #6366f1); padding-left: 20px;">
-        <h3 style="margin: 0 0 10px; color: var(--text-primary);">What file types can I share?</h3>
-        <p style="margin: 0; color: var(--text-secondary);">
-          You can share any file type—documents, images, videos, archives, etc. There are no restrictions on file types, only on file size and total transfer limits.
-        </p>
-      </div>
-
+<!--TODO-->
       <div style="margin-bottom: 30px; border-left: 3px solid var(--accent, #6366f1); padding-left: 20px;">
         <h3 style="margin: 0 0 10px; color: var(--text-primary);">What's the maximum file size?</h3>
         <p style="margin: 0; color: var(--text-secondary);">
-          File size limits depend on your browser's capabilities and available memory. Most modern browsers can handle files up to several gigabytes, but practical limits may be lower on mobile devices.
+          Maximum file size is <span id="maxFileSize">100 MB</span>. This limit depends on server configuration.
         </p>
       </div>
 
       <div style="margin-bottom: 30px; border-left: 3px solid var(--accent, #6366f1); padding-left: 20px;">
-        <h3 style="margin: 0 0 10px; color: var(--text-primary);">Does ReverseQR require an account?</h3>
+        <h3 style="margin: 0 0 10px; color: var(--text-primary);">What's the maximum message size?</h3>
         <p style="margin: 0; color: var(--text-secondary);">
-          No. ReverseQR is completely anonymous—no accounts, no registration, no personal information required.
+          Maximum text message size is <span id="maxMessageSize">1 GB</span>. This allows for very large messages while maintaining performance.
         </p>
       </div>
 
-      <div style="margin-bottom: 30px; border-left: 3px solid var(--accent, #6366f1); padding-left: 20px;">
-        <h3 style="margin: 0 0 10px; color: var(--text-primary);">Can I use ReverseQR on my phone?</h3>
-        <p style="margin: 0; color: var(--text-secondary);">
-          Yes. ReverseQR works on any device with a modern web browser, including smartphones and tablets. The QR code feature is especially useful for mobile-to-desktop sharing.
-        </p>
-      </div>
 
       <h2 style="margin-top: 40px; margin-bottom: 25px; color: var(--text-primary);">Security & Privacy</h2>
 
@@ -127,59 +98,65 @@
         <h3 style="margin: 0 0 10px; color: var(--text-primary);">Can the server admin see my files?</h3>
         <p style="margin: 0; color: var(--text-secondary);">
           No. All encryption and decryption happens in your browser. The server only stores encrypted data and has no access to your encryption keys. Even the server administrator cannot read your files.
-        </p>
-      </div>
-
-      <div style="margin-bottom: 30px; border-left: 3px solid var(--accent, #6366f1); padding-left: 20px;">
-        <h3 style="margin: 0 0 10px; color: var(--text-primary);">Is ReverseQR secure over public WiFi?</h3>
-        <p style="margin: 0; color: var(--text-secondary);">
-          ReverseQR uses HTTPS encryption for the connection between your browser and our server, and all content is additionally encrypted with AES-256-GCM. This provides strong protection even on public WiFi.
-        </p>
-      </div>
-
-      <div style="margin-bottom: 30px; border-left: 3px solid var(--accent, #6366f1); padding-left: 20px;">
-        <h3 style="margin: 0 0 10px; color: var(--text-primary);">Who can access my shared content?</h3>
-        <p style="margin: 0; color: var(--text-secondary);">
-          Only the person who has your session code or QR code can connect to your session. Once connected, both parties can see all shared messages and files. After the session expires, all data is deleted.
+          However, a malicious server operator could send a different webpage that does not encrypt the data, so only trust this service as much as its host.
         </p>
       </div>
 
       <div style="margin-bottom: 30px; border-left: 3px solid var(--accent, #6366f1); padding-left: 20px;">
         <h3 style="margin: 0 0 10px; color: var(--text-primary);">What data do you log?</h3>
         <p style="margin: 0; color: var(--text-secondary);">
-          We log IP addresses and timestamps for security and abuse prevention, but we do not log any message content or file data. All logs are retained for operational purposes only.
+          We log IP addresses, timestamps and file size for limited time for statistics and abuse prevention.
         </p>
       </div>
 
       <h2 style="margin-top: 40px; margin-bottom: 25px; color: var(--text-primary);">Troubleshooting</h2>
 
       <div style="margin-bottom: 30px; border-left: 3px solid var(--accent, #6366f1); padding-left: 20px;">
-        <h3 style="margin: 0 0 10px; color: var(--text-primary);">The connection keeps dropping</h3>
+        <h3 style="margin: 0 0 10px; color: var(--text-primary);">There is no QR code nor 3 word code </h3>
         <p style="margin: 0; color: var(--text-secondary);">
-          This could be due to network issues or browser WebSocket support. Try refreshing the page and reconnecting. Make sure you're using a modern browser (Chrome, Firefox, Safari, Edge) with WebSocket support enabled.
+          You are probably not using HTTPS, which is reqired by webcrypto, the code that encrypts your data. Make sure the URL starts with "https://".
         </p>
       </div>
 
       <div style="margin-bottom: 30px; border-left: 3px solid var(--accent, #6366f1); padding-left: 20px;">
         <h3 style="margin: 0 0 10px; color: var(--text-primary);">I can't scan the QR code</h3>
         <p style="margin: 0; color: var(--text-secondary);">
-          Make sure your device has good lighting and the camera is in focus. If scanning still doesn't work, you can manually enter the 9-character code instead. Both methods work equally well.
-        </p>
-      </div>
-
-      <div style="margin-bottom: 30px; border-left: 3px solid var(--accent, #6366f1); padding-left: 20px;">
-        <h3 style="margin: 0 0 10px; color: var(--text-primary);">The Security Fingerprint doesn't match</h3>
-        <p style="margin: 0; color: var(--text-secondary);">
-          If the 3-word fingerprint doesn't match between sender and receiver, there may be a connection or security issue. Close the session and start over with a new code. If this keeps happening, there may be a network problem or potential security issue.
+          Use the 3-word code to connect.
         </p>
       </div>
 
       <div style="margin-bottom: 30px; border-left: 3px solid var(--accent, #6366f1); padding-left: 20px;">
         <h3 style="margin: 0 0 10px; color: var(--text-primary);">Files won't download</h3>
         <p style="margin: 0; color: var(--text-secondary);">
-          Make sure the sender's session hasn't expired. If you're downloading large files, the process may take a while. Check that you have enough disk space and try downloading in a private/incognito window if you're having issues.
+          Make sure the session hasn't expired. If you're downloading large files, the process may take a while since they first have to be decrypted.
         </p>
       </div>
+
+
+      <h2 style="margin-top: 40px; margin-bottom: 25px; color: var(--text-primary);">More info (nerd stuff)</h2>
+
+      <div style="margin-bottom: 30px; border-left: 3px solid var(--accent, #6366f1); padding-left: 20px;">
+        <h3 style="margin: 0 0 10px; color: var(--text-primary);">How nuch RAM is needed?</h3>
+        <p style="margin: 0; color: var(--text-secondary);">
+          Unforuatly, you need about 3x the size of the files you want to send in free RAM. This is because files are base64-encoded and encrypted in memory before being sent. The same applies for receiving files, which need to be decrypted and decoded in memory before being saved.
+        </p>
+      </div>
+
+      <div style="margin-bottom: 30px; border-left: 3px solid var(--accent, #6366f1); padding-left: 20px;">
+        <h3 style="margin: 0 0 10px; color: var(--text-primary);">How does the encryption work?</h3>
+        <p style="margin: 0; color: var(--text-secondary);">
+          ReverseQR uses ECDH (Elliptic Curve Diffie-Hellman) for secure key exchange and AES-256-GCM for encrypting your messages and files. Your encryption keys never leave your browser—the server cannot decrypt your content.
+          However, a mailicious server operator could send a different webpage that do not encrypt the data, so only trust this service as much as its host.
+        </p>
+      </div>
+
+      <div style="margin-bottom: 30px; border-left: 3px solid var(--accent, #6366f1); padding-left: 20px;">
+        <h3 style="margin: 0 0 10px; color: var(--text-primary);">What's the Security Fingerprint?</h3>
+        <p style="margin: 0; color: var(--text-secondary);">
+          The Security Fingerprint is a 3-word combination Derived from the shared secret key established during the connection. If it does not match, the connection is likely compromised.
+        </p>
+      </div>
+
 
       <a href="/" class="btn" style="display: inline-block; margin-top: 20px; text-decoration: none;">← Back to Home</a>
     </div>
@@ -190,8 +167,6 @@
     <span class="separator">•</span>
     <a href="/privacy.html">Privacy Policy</a>
     <span class="separator">•</span>
-    <a href="/safety.html">Safety</a>
-    <span class="separator">•</span>
     <a href="/faq.html">FAQ</a>
   </footer>
 
@@ -201,8 +176,12 @@
       .then(config => {
         const sessionEl = document.getElementById('sessionTimeout');
         const fileEl = document.getElementById('fileRetention');
+        const maxFileSizeEl = document.getElementById('maxFileSize');
+        const maxMessageSizeEl = document.getElementById('maxMessageSize');
         if (sessionEl) sessionEl.textContent = Math.round(config.sessionTimeout / 60000);
         if (fileEl) fileEl.textContent = Math.round(config.fileRetention / 60000);
+        if (maxFileSizeEl) maxFileSizeEl.textContent = config.maxFileSizeFormatted;
+        if (maxMessageSizeEl) maxMessageSizeEl.textContent = config.bodyLimitFormatted;
       })
       .catch(err => console.error('Failed to load config:', err));
   </script>
