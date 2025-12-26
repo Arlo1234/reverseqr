@@ -21,6 +21,12 @@ let connectionCode = null;
             role: 'receiver',
             token: wsToken
           }));
+          
+          // After reconnecting, check for any messages that may have been queued
+          // while the connection was down
+          if (encryptionKey) {
+            fetchAndDisplayMessages();
+          }
         }
       };
       

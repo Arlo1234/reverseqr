@@ -785,7 +785,7 @@ wss.on('connection', (ws) => {
             }));
           }
         }
-        
+        /* Didn't work
         // If receiver subscribes, check for any queued messages
         if (ws.role === 'receiver') {
           const messages = connManager.getMessages(code);
@@ -796,9 +796,10 @@ wss.on('connection', (ws) => {
               messageCount: messages.length
             }));
           }
-        }
+        }      */
       }
-      
+
+
       // Handle ping/keepalive
       if (data.type === 'ping') {
         ws.send(JSON.stringify({ type: 'pong' }));
