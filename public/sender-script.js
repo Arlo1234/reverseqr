@@ -158,7 +158,7 @@ if (scannedCode) {
 
 // Set up event listeners when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-  // Clear and focus the code input field on page load
+  // Clear and focus the code input field on page load (for fresh connections on reload)
   const codeInput = document.getElementById('codeInput');
   if (codeInput) {
     codeInput.value = '';
@@ -548,9 +548,8 @@ async function connectToReceiver() {
     }
 
     connectedReceiver = true;
-    // Hide the connection section and clear the code input
+    // Hide the connection section
     document.getElementById('codeInputSection').style.display = 'none';
-    document.getElementById('codeInput').value = '';
     // Show the message section
     document.getElementById('messageSection').style.display = 'block';
     // Clear and focus the text input
