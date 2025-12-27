@@ -163,6 +163,13 @@ document.addEventListener('DOMContentLoaded', () => {
   if (codeInput) {
     codeInput.value = '';
     codeInput.focus();
+    
+    // Connect on Enter key press
+    codeInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        connectToReceiver();
+      }
+    });
   }
   
   // Connect button
