@@ -159,10 +159,16 @@ if (scannedCode) {
 // Set up event listeners when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
   // Clear and focus the code input field on page load (for fresh connections on reload)
+  // But only if there's no code in the URL
   const codeInput = document.getElementById('codeInput');
+  const urlParams = new URLSearchParams(window.location.search);
+  const hasCodeInUrl = urlParams.has('code');
+  
   if (codeInput) {
-    codeInput.value = '';
-    codeInput.focus();
+    if (!hasCodeInUrl) {
+      codeInput.value = '';
+      codeInput.focus();
+    }
     
     // Connect on Enter key press
     codeInput.addEventListener('keypress', (e) => {
