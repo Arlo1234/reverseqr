@@ -156,15 +156,17 @@ if (scannedCode) {
   }, 500);
 }
 
-// Set up event listeners when DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
-  // Clear and focus the code input field on page load (for fresh connections on reload)
+// Clear code input on page load/reload (pageshow fires after browser restores form values)
+window.addEventListener('pageshow', () => {
   const codeInput = document.getElementById('codeInput');
   if (codeInput) {
     codeInput.value = '';
     codeInput.focus();
   }
-  
+});
+
+// Set up event listeners when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
   // Connect button
   const connectBtn = document.getElementById('connectBtn');
   if (connectBtn) {
@@ -176,7 +178,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (sendBtn) {
     sendBtn.addEventListener('click', sendMessage);
   }
-  
+
   // File upload area - click to open file picker
   const fileUploadArea = document.getElementById('fileUploadArea');
   if (fileUploadArea) {
