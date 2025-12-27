@@ -448,20 +448,10 @@ textarea:focus {
   left: 0;
   right: 0;
   padding: 16px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  text-align: center;
   background: rgba(255, 255, 255, 0.95);
   border-top: 1px solid var(--border-color);
   font-size: 14px;
-}
-
-.footer-left {
-  text-align: left;
-}
-
-.footer-right {
-  text-align: right;
 }
 
 .footer a {
