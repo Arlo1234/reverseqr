@@ -156,47 +156,15 @@ if (scannedCode) {
   }, 500);
 }
 
-// Clear code input on page load/reload (pageshow fires after browser restores form values)
-window.addEventListener('pageshow', (event) => {
-  // Reset all connection state on page load/reload
-  connectionCode = null;
-  encryptionKey = null;
-  connectedReceiver = false;
-  wsToken = null;
-  dhKeyPairPending = null;
-  receiverKeyResolver = null;
-  
-  // Clear the input field (use setTimeout to ensure it runs after browser restoration)
-  setTimeout(() => {
-    const codeInput = document.getElementById('codeInput');
-    if (codeInput) {
-      codeInput.value = '';
-      codeInput.focus();
-    }
-  }, 50);
-});
-
-// Ensure the browser doesn't persist a non-empty code value across reloads
-window.addEventListener('beforeunload', () => {
+// Set up event listeners when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+  // Clear and focus the code input field on page load (for fresh connections on reload)
   const codeInput = document.getElementById('codeInput');
   if (codeInput) {
     codeInput.value = '';
+    codeInput.focus();
   }
-});
-
-// Also clear on window load event (belt and suspenders)
-window.addEventListener('load', () => {
-  setTimeout(() => {
-    const codeInput = document.getElementById('codeInput');
-    if (codeInput) {
-      codeInput.value = '';
-      codeInput.focus();
-    }
-  }, 50);
-});
-
-// Set up event listeners when DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
+  
   // Connect button
   const connectBtn = document.getElementById('connectBtn');
   if (connectBtn) {
@@ -208,7 +176,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (sendBtn) {
     sendBtn.addEventListener('click', sendMessage);
   }
-
+    
   // File upload area - click to open file picker
   const fileUploadArea = document.getElementById('fileUploadArea');
   if (fileUploadArea) {
