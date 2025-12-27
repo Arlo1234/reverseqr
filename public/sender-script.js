@@ -158,9 +158,10 @@ if (scannedCode) {
 
 // Set up event listeners when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-  // Focus the code input field on page load
+  // Clear and focus the code input field on page load
   const codeInput = document.getElementById('codeInput');
   if (codeInput) {
+    codeInput.value = '';
     codeInput.focus();
   }
   
