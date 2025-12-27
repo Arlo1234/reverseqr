@@ -176,6 +176,14 @@ window.addEventListener('pageshow', (event) => {
   }, 50);
 });
 
+// Ensure the browser doesn't persist a non-empty code value across reloads
+window.addEventListener('beforeunload', () => {
+  const codeInput = document.getElementById('codeInput');
+  if (codeInput) {
+    codeInput.value = '';
+  }
+});
+
 // Also clear on window load event (belt and suspenders)
 window.addEventListener('load', () => {
   setTimeout(() => {
