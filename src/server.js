@@ -732,7 +732,18 @@ const server = app.listen(PORT, () => {
 
 const wss = new WebSocket.Server({ server });
 
-wss.on('connection', (ws) => {
+// Helper function to get client IP from WebSocket connection
+function getWebSocketClientIp(ws, req) {
+  // Try to get IP from request (if available)
+  if (req && req.ip) return req.ip;
+  // Fallback to socket remote address
+  if (ws._socket && ws._socket.remoteAddress) {
+    return ws._socket.remoteAddress.replace(/::ffff:/, '');
+  }
+  return 'unknown';
+}
+
+wss.on('connection', (ws, req) => {
   ws.isAlive = true;
   ws.on('pong', () => { ws.isAlive = true; });
   
@@ -758,6 +769,8 @@ wss.on('connection', (ws) => {
         // Store the session code and role on the websocket
         ws.sessionCode = code;
         ws.role = role || 'unknown';
+        const clientIp = getWebSocketClientIp(ws, req);
+        ws.clientIp = clientIp;
         
         // Add this websocket to the session's client list
         if (!wsConnections.has(code)) {
@@ -769,6 +782,16 @@ wss.on('connection', (ws) => {
         
         // Check if there's already data to send
         const session = connManager.getConnection(code);
+        
+        // Log receiver reconnections with different IP
+        if (ws.role === 'receiver' && session && session.receiverIp && session.receiverIp !== clientIp) {
+          logEvent(clientIp, 'receiver reconnected', `session ${code} (previous IP: ${session.receiverIp})`);
+        }
+        
+        // Track receiver IP for reconnection detection
+        if (ws.role === 'receiver' && session) {
+          session.receiverIp = clientIp;
+        }
         if (session) {
           // If receiver subscribes and sender's key is available, notify immediately
           if (ws.role === 'receiver' && session.responderDhPublicKey) {
@@ -785,7 +808,7 @@ wss.on('connection', (ws) => {
             }));
           }
         }
-        /* Didn't work
+
         // If receiver subscribes, check for any queued messages
         if (ws.role === 'receiver') {
           const messages = connManager.getMessages(code);
@@ -796,7 +819,7 @@ wss.on('connection', (ws) => {
               messageCount: messages.length
             }));
           }
-        }      */
+        }
       }
 
 

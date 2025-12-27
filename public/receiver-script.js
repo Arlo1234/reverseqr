@@ -1,3 +1,12 @@
+// Redirect to HTTPS if crypto.subtle is not available (required for encryption)
+if (!window.crypto || !window.crypto.subtle) {
+  if (window.location.protocol === 'http:') {
+    window.location.href = window.location.href.replace('http:', 'https:');
+  } else {
+    alert('Your browser does not support the Web Crypto API. Please use a modern browser.');
+  }
+}
+
 let connectionCode = null;
     let encryptionKey = null;
     let dhKeyPair = null;  // Our DH key pair
@@ -295,7 +304,8 @@ let connectionCode = null;
           `;
         }
 
-        messagesList.appendChild(msgDiv);
+        // Insert at the beginning to show newest messages first
+        messagesList.insertBefore(msgDiv, messagesList.firstChild);
       }
     }
 

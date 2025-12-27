@@ -1,17 +1,17 @@
 # !!!!!!!!!!STILL IN ALPHA, DONT TRY TO MAKE IT WORK!!!!!!!!!! 
 
-# 🔒 ReverseQR - Secure File & Text Sharing
+# ReverseQR - Secure File & Text Sharing
 
-A modern, secure web application for sharing files and text between two users with military-grade encryption and human-readable connection codes.
+A web application for sharing files and text between two devices without account or pervious contact.
 
-## ✨ Features
+## Features
 
-### 🔐 Security
+### Security
 - **Diffie-Hellman Key Exchange**: Secure key establishment without pre-shared secrets
-- **AES-256-GCM Encryption**: Military-grade encryption for all data
-- **SHA-256 Hashing**: Automatic integrity verification of all messages
-- **HTTPS/TLS Support**: All communication can be encrypted end-to-end
-- **No Data Retention**: Messages are not stored after download
+- **AES-256-GCM Encryption**: Encryption for all data
+- **SHA-256 Hashing**: Automatic integrity verification of the shared secret to detect man in the middle attack
+- **No Data Retention**: Files get deleted shortly after upload (default: 30 minutes)
+
 
 ### 📱 Connection Methods
 1. **QR Code Mode**: Receiver displays QR code, sender scans it
