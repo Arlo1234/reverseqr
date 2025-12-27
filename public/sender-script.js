@@ -173,7 +173,18 @@ window.addEventListener('pageshow', (event) => {
       codeInput.value = '';
       codeInput.focus();
     }
-  }, 0);
+  }, 50);
+});
+
+// Also clear on window load event (belt and suspenders)
+window.addEventListener('load', () => {
+  setTimeout(() => {
+    const codeInput = document.getElementById('codeInput');
+    if (codeInput) {
+      codeInput.value = '';
+      codeInput.focus();
+    }
+  }, 50);
 });
 
 // Set up event listeners when DOM is ready
