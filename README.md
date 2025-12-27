@@ -13,19 +13,13 @@ A web application for sharing files and text between two devices without account
 - **No Data Retention**: Files get deleted shortly after upload (default: 30 minutes)
 
 
-### 📱 Connection Methods
-1. **QR Code Mode**: Receiver displays QR code, sender scans it
-2. **Manual Code Entry**: Sender displays code, receiver enters it
-3. **Human-Readable Codes**: PGP wordlist encoding for easy verbal transmission
+### Easy use
+1. **QR Code**: Receiver displays QR code, sender scans it
+2. **Human-Readable Codes**: PGP wordlist encoding for easy verbal transmission
 
-### 📦 Supported Content
-- **Text Messages**: Direct display on receiver
-- **File Uploads**: Multiple files up to 500MB each
-- **Automatic Decryption**: Files are decrypted transparently on download
-- **Drag & Drop**: Easy file upload interface
-
-### 🌐 Accessibility
-- Modern, responsive web interface
+### A sumple but powerful tool:
+- Text Message and File transfer 
+- A sleek, Modern, responsive web interface
 - No installation required on client machines
 - Works on desktop and mobile browsers
 - Zero-configuration for users
