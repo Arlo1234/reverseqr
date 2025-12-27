@@ -157,12 +157,23 @@ if (scannedCode) {
 }
 
 // Clear code input on page load/reload (pageshow fires after browser restores form values)
-window.addEventListener('pageshow', () => {
-  const codeInput = document.getElementById('codeInput');
-  if (codeInput) {
-    codeInput.value = '';
-    codeInput.focus();
-  }
+window.addEventListener('pageshow', (event) => {
+  // Reset all connection state on page load/reload
+  connectionCode = null;
+  encryptionKey = null;
+  connectedReceiver = false;
+  wsToken = null;
+  dhKeyPairPending = null;
+  receiverKeyResolver = null;
+  
+  // Clear the input field (use setTimeout to ensure it runs after browser restoration)
+  setTimeout(() => {
+    const codeInput = document.getElementById('codeInput');
+    if (codeInput) {
+      codeInput.value = '';
+      codeInput.focus();
+    }
+  }, 0);
 });
 
 // Set up event listeners when DOM is ready
