@@ -24,13 +24,13 @@ A web application for sharing files and text between two devices without account
 - Works on desktop and mobile browsers
 - Zero-configuration for users
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Installation
 
 1. **Clone and navigate to project:**
 ```bash
-cd /home/armand/Documents/reverseqr
+cd reverseqr/
 ```
 
 2. **Install dependencies:**
@@ -46,7 +46,6 @@ npm start
 4. **Access the application:**
 - Receiver: http://localhost:3000
 - Sender: http://localhost:3000/sender
-- Alternative: http://localhost:3000/receiver
 
 ### First Time Usage
 
