@@ -158,6 +158,12 @@ if (scannedCode) {
 
 // Set up event listeners when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
+  // Focus the code input field on page load
+  const codeInput = document.getElementById('codeInput');
+  if (codeInput) {
+    codeInput.focus();
+  }
+  
   // Connect button
   const connectBtn = document.getElementById('connectBtn');
   if (connectBtn) {
@@ -541,10 +547,16 @@ async function connectToReceiver() {
     }
 
     connectedReceiver = true;
-    // Hide the connection section
+    // Hide the connection section and clear the code input
     document.getElementById('codeInputSection').style.display = 'none';
+    document.getElementById('codeInput').value = '';
     // Show the message section
     document.getElementById('messageSection').style.display = 'block';
+    // Clear and focus the text input
+    const textInput = document.getElementById('textInput');
+    if (textInput) {
+      textInput.focus();
+    }
     setTimeout(() => {
       status.style.display = 'none';
     }, 3000);
